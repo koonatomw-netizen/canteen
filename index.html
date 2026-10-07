@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f8f8f4" />
+    <meta name="description" content="A simple, mobile-friendly daily canteen food and waste tracker." />
+    <title>Canteen · Daily operations</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <main id="file-open-message" hidden style="max-width: 680px; margin: 10vh auto; padding: 28px; border: 1px solid #e5e9e2; border-radius: 16px; background: #fff; color: #344a3d; font: 16px/1.6 system-ui, sans-serif;">
+      <p style="margin: 0; color: #64896e; font-size: 12px; font-weight: 700; letter-spacing: .08em;">CANTEEN · DAILY OPERATIONS</p>
+      <h1 style="margin: 8px 0; font-size: 28px;">Start the app with Vite</h1>
+      <p>This project cannot run by opening <code>index.html</code> directly. From the project folder, run:</p>
+      <pre style="padding: 14px; border-radius: 9px; background: #f4f6f1;">npm install
+npm run dev</pre>
+      <p>Then open <a href="http://localhost:5173/">http://localhost:5173/</a> in your browser.</p>
+    </main>
+    <script>
+      if (window.location.protocol === 'file:') {
+        document.getElementById('root').hidden = true;
+        document.getElementById('file-open-message').hidden = false;
+      }
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,1 @@
+-- No business records are seeded. Create demo data only in a disposable local project.
