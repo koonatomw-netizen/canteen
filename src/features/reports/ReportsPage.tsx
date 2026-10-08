@@ -4,12 +4,12 @@ import { EmptyState, LoadingState, Notice } from '../../components/Feedback';
 import { PageTitle } from '../../components/PageTitle';
 import { addCalendarDays, businessDateNow } from '../../lib/dates';
 import { buildReportDateBuckets } from '../../lib/reportBuckets';
-import { formatBaht, formatDate, formatQuantity } from '../../lib/format';
+import { formatBaht, formatDate, formatFoodVariant, formatQuantity } from '../../lib/format';
 import { downloadCsv } from '../../lib/csv';
 import { requireSupabase } from '../../lib/supabase';
 
-interface Production { id: string; production_date: string; quantity_produced: number; expiry_date: string; menu_items: { name: string } | null; }
-interface Waste { id: string; waste_date: string; quantity: number; reason: string; production_batches: { menu_items: { name: string } | null } | null; }
+interface Production { id: string; production_date: string; quantity_produced: number; expiry_date: string; menu_items: { name: string } | null; meat_options: { name: string } | null; }
+interface Waste { id: string; waste_date: string; quantity: number; reason: string; production_batches: { menu_items: { name: string } | null; meat_options: { name: string } | null } | null; }
 interface Expense { id: string; expense_date: string; amount_thb: number; stores: { name: string } | null; expense_categories: { name: string } | null; notes: string | null; }
 interface Stock { menu_name: string; production_date: string; expiry_date: string; quantity_remaining: number; }
 interface Activity { id: string; occurred_at: string; action: string; entity_type: string; description: string; }
@@ -34,8 +34,8 @@ export function ReportsPage() {
       setBusy(true); setError('');
       const db = requireSupabase(); const nextDay = addCalendarDays(end, 1);
       const [productionResult, wasteResult, expenseResult, stockResult, activityResult, closingResult] = await Promise.all([
-        db.from('production_batches').select('id, production_date, quantity_produced, expiry_date, menu_items(name)').gte('production_date', start).lte('production_date', end).is('deleted_at', null),
-        db.from('waste_records').select('id, waste_date, quantity, reason, production_batches(menu_items(name))').gte('waste_date', start).lte('waste_date', end).is('deleted_at', null),
+        db.from('production_batches').select('id, production_date, quantity_produced, expiry_date, menu_items(name), meat_options(name)').gte('production_date', start).lte('production_date', end).is('deleted_at', null),
+        db.from('waste_records').select('id, waste_date, quantity, reason, production_batches(menu_items(name), meat_options(name))').gte('waste_date', start).lte('waste_date', end).is('deleted_at', null),
         db.from('expenses').select('id, expense_date, amount_thb, stores(name), expense_categories(name), notes').gte('expense_date', start).lte('expense_date', end).is('deleted_at', null),
         db.from('v_stock_by_batch').select('menu_name, production_date, expiry_date, quantity_remaining').gt('quantity_remaining', 0),
         db.from('activity_logs').select('id, occurred_at, action, entity_type, description').gte('occurred_at', `${start}T00:00:00+07:00`).lt('occurred_at', `${nextDay}T00:00:00+07:00`).order('occurred_at', { ascending: false }).limit(1000),
@@ -68,8 +68,8 @@ export function ReportsPage() {
 
   const exports: { label: string; icon: typeof ReceiptText; rows: Array<Record<string, unknown>> }[] = [
     { label: 'Expenses', icon: ReceiptText, rows: expenses.map((row) => ({ date: row.expense_date, store: row.stores?.name ?? '', category: row.expense_categories?.name ?? '', amount_thb: row.amount_thb, notes: row.notes })) },
-    { label: 'Production', icon: UtensilsCrossed, rows: production.map((row) => ({ date: row.production_date, menu: row.menu_items?.name ?? '', quantity: row.quantity_produced, expiry_date: row.expiry_date })) },
-    { label: 'Waste', icon: Trash2, rows: waste.map((row) => ({ date: row.waste_date, menu: row.production_batches?.menu_items?.name ?? '', quantity: row.quantity, reason: row.reason })) },
+    { label: 'Production', icon: UtensilsCrossed, rows: production.map((row) => ({ date: row.production_date, menu: formatFoodVariant(row.menu_items?.name, row.meat_options?.name), quantity: row.quantity_produced, expiry_date: row.expiry_date })) },
+    { label: 'Waste', icon: Trash2, rows: waste.map((row) => ({ date: row.waste_date, menu: formatFoodVariant(row.production_batches?.menu_items?.name, row.production_batches?.meat_options?.name), quantity: row.quantity, reason: row.reason })) },
     { label: 'Stock', icon: BarChart3, rows: stock.map((row) => ({ menu: row.menu_name, production_date: row.production_date, expiry_date: row.expiry_date, remaining_quantity: row.quantity_remaining })) },
     { label: 'Activity', icon: CalendarRange, rows: activity.map((row) => ({ occurred_at: row.occurred_at, action: row.action, entity_type: row.entity_type, description: row.description })) },
     { label: 'Daily closing', icon: CalendarRange, rows: closings.flatMap((day) => day.closing_batch_counts.map((count) => ({ business_date: day.business_date, closing_version: day.version, batch_id: count.production_batch_id, expected: count.expected_quantity, physical_remaining: count.physical_remaining_quantity, inferred_sold: count.calculated_sold_quantity, adjustment: count.stock_adjustment_quantity, adjustment_reason: count.adjustment_reason, note: day.note }))) },

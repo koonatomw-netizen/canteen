@@ -3,13 +3,13 @@ import { AlertTriangle, CalendarCheck, CheckCircle2, ClipboardCheck, LockKeyhole
 import { EmptyState, LoadingState, Notice } from '../../components/Feedback';
 import { PageTitle } from '../../components/PageTitle';
 import { businessDateNow, formatBusinessDate } from '../../lib/dates';
-import { formatQuantity } from '../../lib/format';
+import { formatFoodVariant, formatQuantity } from '../../lib/format';
 import { calculateClosing, getBatchBalance } from '../../lib/stock';
 import { requireSupabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
 
-interface BatchRow { id: string; production_date: string; expiry_date: string; menu_items: { name: string } | null; stock_movements: { business_date: string; quantity_delta: number }[]; }
-interface Batch { id: string; menu_name: string; production_date: string; expiry_date: string; quantity_remaining: number; }
+interface BatchRow { id: string; production_date: string; expiry_date: string; menu_items: { name: string } | null; meat_options: { name: string } | null; stock_movements: { business_date: string; quantity_delta: number }[]; }
+interface Batch { id: string; menu_name: string; production_date: string; expiry_date: string; quantity_available: number; }
 interface Count { production_batch_id: string; expected_quantity: number; physical_remaining_quantity: number; calculated_sold_quantity: number; stock_adjustment_quantity: number; adjustment_reason: string | null; }
 interface Closing { id: string; version: number; status: 'open' | 'closed' | 'reopened'; closed_at: string | null; note: string | null; closing_batch_counts: Count[]; }
 
@@ -32,23 +32,28 @@ export function ClosingPage() {
     setBusy(true); setError('');
     const db = requireSupabase();
     const [stockResult, closingResult] = await Promise.all([
-      db.from('production_batches').select('id, production_date, expiry_date, menu_items(name), stock_movements!inner(business_date, quantity_delta)').lte('production_date', businessDate).lte('stock_movements.business_date', businessDate).is('deleted_at', null).order('expiry_date'),
+      db.from('production_batches').select('id, production_date, expiry_date, menu_items(name), meat_options(name), stock_movements!inner(business_date, quantity_delta)').lte('production_date', businessDate).lte('stock_movements.business_date', businessDate).is('deleted_at', null).order('expiry_date'),
       db.from('daily_closings').select('id, version, status, closed_at, note, closing_batch_counts(production_batch_id, expected_quantity, physical_remaining_quantity, calculated_sold_quantity, stock_adjustment_quantity, adjustment_reason)').eq('business_date', businessDate).order('version', { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (stockResult.error || closingResult.error) setError(stockResult.error?.message ?? closingResult.error?.message ?? 'Could not load the closing count.');
+    const latest = (closingResult.data as unknown as Closing | null) ?? null;
+    const recordedCounts = latest?.status === 'closed'
+      ? new Map((latest.closing_batch_counts ?? []).map((row) => [row.production_batch_id, row]))
+      : new Map<string, Count>();
     const batches = ((stockResult.data ?? []) as unknown as BatchRow[]).map((batch) => ({
       id: batch.id,
-      menu_name: batch.menu_items?.name ?? 'Food batch',
+      menu_name: formatFoodVariant(batch.menu_items?.name, batch.meat_options?.name),
       production_date: batch.production_date,
       expiry_date: batch.expiry_date,
-      quantity_remaining: getBatchBalance(batch.stock_movements, businessDate),
-    })).filter((batch) => batch.quantity_remaining > 0);
+      quantity_available: recordedCounts.get(batch.id)?.expected_quantity ?? getBatchBalance(batch.stock_movements, businessDate),
+    })).filter((batch) => batch.quantity_available > 0 || recordedCounts.has(batch.id));
     setStock(batches);
-    const latest = (closingResult.data as unknown as Closing | null) ?? null;
     setClosing(latest);
-    const priorCounts = new Map((latest?.closing_batch_counts ?? []).map((row) => [row.production_batch_id, row]));
+    const priorCounts = latest?.status === 'closed'
+      ? new Map((latest.closing_batch_counts ?? []).map((row) => [row.production_batch_id, row]))
+      : new Map<string, Count>();
     setCounts(Object.fromEntries(batches.map((batch) => [batch.id, priorCounts.has(batch.id) ? String(priorCounts.get(batch.id)!.physical_remaining_quantity) : ''])));
-    setReasons(Object.fromEntries((latest?.closing_batch_counts ?? []).map((row) => [row.production_batch_id, row.adjustment_reason ?? ''])));
+    setReasons(Object.fromEntries((latest?.status === 'closed' ? latest.closing_batch_counts : []).map((row) => [row.production_batch_id, row.adjustment_reason ?? ''])));
     setNote(latest?.note ?? '');
     setBusy(false);
   }
@@ -69,7 +74,7 @@ export function ClosingPage() {
           }
         : counts[batch.id] === undefined || counts[batch.id] === ''
           ? null
-          : calculateClosing(Number(batch.quantity_remaining), Number(counts[batch.id]));
+          : calculateClosing(Number(batch.quantity_available), Number(counts[batch.id]));
       return { ...batch, calculation };
     });
   }, [stock, counts, closing, alreadyClosed]);
@@ -118,13 +123,19 @@ export function ClosingPage() {
     {busy ? <section className="panel"><LoadingState label="Preparing this day’s count…" /></section> : <div className="closing-layout">
       <form className="panel closing-form" onSubmit={submit}>
         <div className="panel-head"><div><span className="eyebrow">PHYSICAL BATCH COUNT</span><h2>How many are left?</h2></div><span className="form-panel-icon green"><ClipboardCheck size={20} /></span></div>
-        {stock.length === 0 ? <EmptyState title="No stock to count" detail="You can close this day with no remaining batches, or record production and return here." /> : <div className="closing-batch-list">{stock.map((batch) => {
-          const calculation = calculateClosing(Number(batch.quantity_remaining), Number(counts[batch.id] || 0));
-          return <article className="closing-batch-row" key={batch.id}><span className="closing-batch-mark"><CalendarCheck size={16} /></span><div className="closing-batch-info"><strong>{batch.menu_name}</strong><small>{formatBusinessDate(batch.production_date)} · {formatQuantity(batch.quantity_remaining)} boxes expected</small></div><label className="closing-count-label"><span>LEFT</span><input type="number" min="0" step="1" inputMode="numeric" value={counts[batch.id] ?? ''} onChange={(event) => setCounts((current) => ({ ...current, [batch.id]: event.target.value }))} disabled={alreadyClosed} required /><small>boxes</small></label>
-            {calculation.adjustment > 0 && <div className="adjustment-inline"><AlertTriangle size={15} /><span>Found {formatQuantity(calculation.adjustment)} extra. Why?</span><select required aria-label={`Reason for extra stock in ${batch.menu_name}`} value={reasons[batch.id] ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [batch.id]: event.target.value }))} disabled={alreadyClosed}><option value="">Choose a reason</option>{adjustmentReasons.map((reason) => <option key={reason}>{reason}</option>)}</select></div>}
-            {counts[batch.id] !== undefined && counts[batch.id] !== '' && <span className="closing-calc-note">{calculation.sold > 0 ? `${formatQuantity(calculation.sold)} inferred sold` : calculation.adjustment > 0 ? `${formatQuantity(calculation.adjustment)} adjustment` : 'No movement inferred'} · expires {formatBusinessDate(batch.expiry_date)}</span>}
-          </article>;
-        })}</div>}
+        {stock.length === 0 ? <EmptyState title="No stock to count" detail="You can close this day with no remaining batches, or record production and return here." /> : <>
+          <div className="closing-count-head"><span>FOOD BATCH</span><span>AVAILABLE</span><span>LEFT AT CLOSE</span><span>SOLD</span></div>
+          <div className="closing-batch-list">{results.map((batch) => {
+            const hasPhysicalCount = alreadyClosed || (counts[batch.id] !== undefined && counts[batch.id] !== '');
+            const calculation = batch.calculation;
+            return <article className="closing-batch-row" key={batch.id}><span className="closing-batch-mark"><CalendarCheck size={16} /></span><div className="closing-batch-info"><strong>{batch.menu_name}</strong><small>{formatBusinessDate(batch.production_date)} · expires {formatBusinessDate(batch.expiry_date)}</small></div>
+              <div className="closing-quantity-cell"><small>AVAILABLE</small><strong>{formatQuantity(batch.quantity_available)}</strong><span>boxes</span></div>
+              <label className="closing-count-label"><span>LEFT AT CLOSE</span><input type="number" min="0" step="1" inputMode="numeric" value={counts[batch.id] ?? ''} onChange={(event) => setCounts((current) => ({ ...current, [batch.id]: event.target.value }))} disabled={alreadyClosed} required /><small>boxes</small></label>
+              <div className="closing-quantity-cell closing-sold-cell"><small>SOLD</small><strong>{hasPhysicalCount ? formatQuantity(calculation?.sold ?? 0) : '—'}</strong><span>boxes</span></div>
+              {calculation && calculation.adjustment > 0 && <div className="adjustment-inline"><AlertTriangle size={15} /><span>Found {formatQuantity(calculation.adjustment)} extra. Why?</span><select required aria-label={`Reason for extra stock in ${batch.menu_name}`} value={reasons[batch.id] ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [batch.id]: event.target.value }))} disabled={alreadyClosed}><option value="">Choose a reason</option>{adjustmentReasons.map((reason) => <option key={reason}>{reason}</option>)}</select></div>}
+            </article>;
+          })}</div>
+        </>}
         <label className="closing-note">Note <span className="optional-label">OPTIONAL</span><textarea rows={2} placeholder="Anything unusual about today?" value={note} onChange={(event) => setNote(event.target.value)} disabled={alreadyClosed} /></label>
         {!alreadyClosed && <button className="button button-primary closing-submit" disabled={saving || !allCountsEntered || adjustmentMissing}><LockKeyhole size={17} />{saving ? 'Saving closing…' : 'Close this day'}</button>}
       </form>

@@ -97,18 +97,21 @@ Keep primary navigation small:
 2.  **Production**
 3.  **Stock**
 4.  **Waste**
-5.  **Expenses**
-6.  **Reports**
-7.  **Manage**
+5.  **Daily Closing**
+6.  **Expenses**
+7.  **Reports**
+8.  **Manage**
 
 Under **Manage**:
 
 -   Menu Items
+-   Meat Options
 -   Stores
 -   Activity Log
 -   Settings
 
-Do not clutter the primary navigation with administrative pages.
+Daily Closing is an always-visible operational shortcut in the sidebar and
+mobile navigation. Keep administrative pages under Manage.
 
 ------------------------------------------------------------------------
 
@@ -177,6 +180,17 @@ Fields:
 -   Future/reserved: selling price
 -   Future/reserved: estimated cost per box
 
+All menu items use the same configurable list of meat options. Start with:
+
+-   Beef
+-   Chicken
+-   Pork
+-   Vegan
+
+Staff can add or deactivate shared meat options from Manage. Each production
+batch selects one menu and one active meat option. The variant inherits its
+menu's shelf life; shelf life is not configured separately per meat.
+
 Example:
 
 ``` text
@@ -185,9 +199,10 @@ Default shelf life: 3 days
 Status: Active
 ```
 
-Do not permanently delete a menu that has historical transactions.
-
-Use inactive/archive status or soft deletion.
+Menus with production history cannot be permanently removed and must be
+archived to hide them from future production while preserving their records.
+A menu with no production history may be permanently removed after
+confirmation; the removal is audited.
 
 The application must support different shelf lives by menu, even if
 initially many menus use the same shelf life.
@@ -243,6 +258,7 @@ Fields:
 
 -   Date produced
 -   Menu
+-   Meat option (shared list)
 -   Quantity produced
 -   Expiry date
 -   Notes (optional)
@@ -251,6 +267,7 @@ Example:
 
 ``` text
 Chicken Rice
+Meat option: Chicken
 Produced: 20 boxes
 Production date: 07 Oct 2026
 Expiry: 10 Oct 2026
@@ -259,6 +276,7 @@ Expiry: 10 Oct 2026
 ## 8.2 Automatic Expiry
 
 Each menu has a default shelf life.
+All meat variants of that menu share the same default shelf life.
 
 Example:
 
@@ -395,12 +413,12 @@ Replace the handwritten waste workflow.
 Fields:
 
 -   Date/time
--   Menu
+-   Menu and meat variant (read from the selected batch)
 -   Production batch
 -   Quantity
 -   Reason
 -   Notes
--   Optional photo
+-   Optional multiple photos
 
 Waste reasons:
 
@@ -425,7 +443,7 @@ Prevent waste quantity from exceeding available batch stock.
 
 ## 11.2 Waste Photo
 
-Photo is optional.
+Photos are optional and multiple photos may be attached to one waste record.
 
 It may be useful for unusual events such as:
 
@@ -453,25 +471,23 @@ approximately 1--2 minutes.
 Conceptual equation:
 
 ``` text
-Opening Stock
-+ Produced Today
-- Waste
-- Sold
-= Remaining
+Available stock (after recorded production and waste)
+- Inferred sold
++ Positive adjustment, when needed
+= Left at close
 ```
 
-Staff records the physical remaining quantities.
-
-The system derives sold quantity where sufficient data exists.
+For each batch, show **Available** from the stock ledger (read-only), let
+staff enter **Left at close**, and calculate **Sold**. Do not assume FIFO.
+The selected batch and its menu/meat variant remain visible throughout.
 
 Example:
 
 ``` text
 Available: 30
-Waste:      2
-Remaining:  8
+Left at close: 8
 
-Calculated Sold: 20
+Calculated Sold: 22 (available stock already reflects recorded waste)
 ```
 
 ## 12.2 Batch-Level Closing
@@ -483,6 +499,7 @@ Example:
 
 ``` text
 Chicken Rice
+Meat option: Chicken
 
 Batch 06 Oct
 Expected available: 5
@@ -545,7 +562,7 @@ Fields:
 -   Store
 -   Category
 -   Amount (THB)
--   Receipt photo
+-   Multiple receipt photos
 -   Notes
 
 Example:
@@ -577,9 +594,9 @@ Keep the category structure extensible.
 
 Phase 1 only needs:
 
--   Photo upload
--   Photo preview
--   Photo retrieval
+-   Multiple private photo uploads per expense
+-   Photo previews
+-   Photo retrieval through authenticated access or short-lived signed URLs
 
 Do not implement AI/OCR receipt extraction in Phase 1.
 
@@ -780,7 +797,7 @@ Exact implementation may vary, but the domain should roughly include:
 -   store_id
 -   category_id
 -   amount_thb
--   receipt_url
+-   receipt_url (legacy single-photo compatibility)
 -   notes
 -   created_at
 -   updated_at
@@ -790,6 +807,7 @@ Exact implementation may vary, but the domain should roughly include:
 
 -   id
 -   menu_id
+-   meat_option_id (nullable only for unmatched legacy batches)
 -   production_date
 -   quantity_produced
 -   expiry_date
@@ -806,10 +824,28 @@ Exact implementation may vary, but the domain should roughly include:
 -   quantity
 -   reason
 -   notes
--   photo_url
+-   photo_url (legacy single-photo compatibility)
 -   created_at
 -   updated_at
 -   deleted_at
+
+## `meat_options`
+
+-   id
+-   name
+-   active
+-   created_at
+-   updated_at
+
+Every menu shares this one option list. Shelf life remains on the menu item.
+
+## `waste_record_photos` and `expense_receipt_photos`
+
+-   id
+-   parent record ID
+-   private storage path
+-   created_at
+-   created_by
 
 ## `daily_closings`
 
@@ -972,8 +1008,8 @@ Prioritize:
 
 Forms should work comfortably one-handed where practical.
 
-Receipt and waste photos should support direct mobile camera/file
-upload.
+Receipt and waste photos should support multiple images from the mobile
+camera or file picker. Keep storage private.
 
 ------------------------------------------------------------------------
 
@@ -1004,14 +1040,18 @@ This is conceptual, not a strict visual design requirement.
 Phase 1 is considered successful when a user can:
 
 -   Add a new menu.
+-   Add, deactivate, and restore a shared meat option.
 -   Add a new store.
 -   Record today's food production.
+-   Choose a meat option for each production batch.
 -   Automatically receive a suggested expiry date.
 -   Override expiry when needed.
 -   See current stock by menu and batch.
+-   See variants as separate batches through Stock, Waste, and Closing.
 -   See expiring and expired batches.
 -   Record waste against a batch.
--   Add an expense and receipt photo.
+-   Add an expense with multiple receipt photos.
+-   Attach multiple photos to a waste record.
 -   Complete daily closing.
 -   Record remaining stock by batch.
 -   Have sold quantity calculated.
@@ -1020,6 +1060,8 @@ Phase 1 is considered successful when a user can:
 -   View daily/weekly/monthly summaries.
 -   View activity history.
 -   Safely delete/restore supported records.
+-   Permanently remove unused menus, while preserving and archiving menus
+    with production history.
 -   Export core data.
 -   Complete common workflows comfortably on mobile.
 

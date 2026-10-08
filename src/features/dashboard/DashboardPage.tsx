@@ -5,15 +5,15 @@ import { EmptyState, LoadingState, Notice } from '../../components/Feedback';
 import { PageTitle } from '../../components/PageTitle';
 import { StatusBadge } from '../../components/StatusBadge';
 import { businessDateNow, formatBangkokTime, formatBusinessDate } from '../../lib/dates';
-import { formatBaht, formatQuantity } from '../../lib/format';
+import { formatBaht, formatFoodVariant, formatQuantity } from '../../lib/format';
 import { getExpiryStatus } from '../../lib/stock';
 import { requireSupabase } from '../../lib/supabase';
 
-interface Production { id: string; production_date: string; expiry_date: string; quantity_produced: number; notes: string | null; created_at: string; menu_items: { name: string } | null; }
-interface Waste { id: string; quantity: number; reason: string; notes: string | null; waste_date: string; created_at: string; production_batches: { production_date: string; menu_items: { name: string } | null } | null; }
+interface Production { id: string; production_date: string; expiry_date: string; quantity_produced: number; notes: string | null; created_at: string; menu_items: { name: string } | null; meat_options: { name: string } | null; }
+interface Waste { id: string; quantity: number; reason: string; notes: string | null; waste_date: string; created_at: string; production_batches: { production_date: string; menu_items: { name: string } | null; meat_options: { name: string } | null } | null; }
 interface Stock { id: string; menu_name: string; production_date: string; expiry_date: string; quantity_remaining: number; }
 interface Expense { id: string; amount_thb: number; notes: string | null; created_at: string; stores: { name: string } | null; expense_categories: { name: string } | null; }
-interface ClosingCount { production_batch_id: string; expected_quantity: number; physical_remaining_quantity: number; calculated_sold_quantity: number; stock_adjustment_quantity: number; adjustment_reason: string | null; production_batches: { production_date: string; menu_items: { name: string } | null } | null; }
+interface ClosingCount { production_batch_id: string; expected_quantity: number; physical_remaining_quantity: number; calculated_sold_quantity: number; stock_adjustment_quantity: number; adjustment_reason: string | null; production_batches: { production_date: string; menu_items: { name: string } | null; meat_options: { name: string } | null } | null; }
 interface Closing { status: 'open' | 'closed' | 'reopened'; version: number; closed_at: string | null; note: string | null; closing_batch_counts: ClosingCount[]; }
 type DashboardDetail = 'production' | 'closing' | 'stock' | 'waste' | 'expenses';
 
@@ -64,11 +64,11 @@ export function DashboardPage() {
       setError('');
       const db = requireSupabase();
       const [productionResult, wasteResult, stockResult, expenseResult, closingResult] = await Promise.all([
-        db.from('production_batches').select('id, production_date, expiry_date, quantity_produced, notes, created_at, menu_items(name)').eq('production_date', today).is('deleted_at', null).order('created_at', { ascending: false }),
-        db.from('waste_records').select('id, quantity, reason, notes, waste_date, created_at, production_batches(production_date, menu_items(name))').eq('waste_date', today).is('deleted_at', null).order('created_at', { ascending: false }),
+        db.from('production_batches').select('id, production_date, expiry_date, quantity_produced, notes, created_at, menu_items(name), meat_options(name)').eq('production_date', today).is('deleted_at', null).order('created_at', { ascending: false }),
+        db.from('waste_records').select('id, quantity, reason, notes, waste_date, created_at, production_batches(production_date, menu_items(name), meat_options(name))').eq('waste_date', today).is('deleted_at', null).order('created_at', { ascending: false }),
         db.from('v_stock_by_batch').select('id, menu_name, production_date, expiry_date, quantity_remaining').gt('quantity_remaining', 0).order('expiry_date'),
         db.from('expenses').select('id, amount_thb, notes, created_at, stores(name), expense_categories(name)').eq('expense_date', today).is('deleted_at', null).order('created_at', { ascending: false }),
-        db.from('daily_closings').select('status, version, closed_at, note, closing_batch_counts(production_batch_id, expected_quantity, physical_remaining_quantity, calculated_sold_quantity, stock_adjustment_quantity, adjustment_reason, production_batches(production_date, menu_items(name)))').eq('business_date', today).order('version', { ascending: false }).limit(1).maybeSingle(),
+        db.from('daily_closings').select('status, version, closed_at, note, closing_batch_counts(production_batch_id, expected_quantity, physical_remaining_quantity, calculated_sold_quantity, stock_adjustment_quantity, adjustment_reason, production_batches(production_date, menu_items(name), meat_options(name)))').eq('business_date', today).order('version', { ascending: false }).limit(1).maybeSingle(),
       ]);
       if (!alive) return;
       const firstError = [productionResult, wasteResult, stockResult, expenseResult, closingResult].find((result) => result.error)?.error;
@@ -120,13 +120,13 @@ export function DashboardPage() {
       <div className="dashboard-dialog-content">
       {detailView === 'production' && <section className="panel dashboard-detail-panel">
         <div className="dashboard-detail-context"><span className="count-chip">{production.length} BATCHES</span><span className="analysis-panel-note">{formatBusinessDate(today)}</span></div>
-        {busy ? <LoadingState label="Loading production details…" /> : production.length === 0 ? <EmptyState title="No production recorded today" detail="Today’s batches and quantities will appear here when production is recorded." /> : <div className="analysis-detail-list">{production.map((row) => <DetailRow key={row.id} icon={UtensilsCrossed} title={row.menu_items?.name ?? 'Archived menu item'} detail={`Made ${formatBusinessDate(row.production_date)} · Best before ${formatBusinessDate(row.expiry_date)} · ${formatBangkokTime(row.created_at)}`} note={row.notes} amount={formatQuantity(Number(row.quantity_produced))} amountLabel="boxes" />)}</div>}
+        {busy ? <LoadingState label="Loading production details…" /> : production.length === 0 ? <EmptyState title="No production recorded today" detail="Today’s batches and quantities will appear here when production is recorded." /> : <div className="analysis-detail-list">{production.map((row) => <DetailRow key={row.id} icon={UtensilsCrossed} title={formatFoodVariant(row.menu_items?.name ?? 'Archived menu item', row.meat_options?.name)} detail={`Made ${formatBusinessDate(row.production_date)} · Best before ${formatBusinessDate(row.expiry_date)} · ${formatBangkokTime(row.created_at)}`} note={row.notes} amount={formatQuantity(Number(row.quantity_produced))} amountLabel="boxes" />)}</div>}
         <Link className="text-link dashboard-detail-link" to="/production">View production</Link>
       </section>}
 
       {detailView === 'waste' && <section className="panel dashboard-detail-panel">
         <div className="dashboard-detail-context"><span className="count-chip">{waste.length} RECORDS</span></div>
-        {busy ? <LoadingState label="Loading waste details…" /> : waste.length === 0 ? <EmptyState title="No waste recorded today" detail="When food is recorded as waste, its batch, quantity and reason will appear here." /> : <div className="analysis-detail-list">{waste.map((row) => <DetailRow key={row.id} icon={Trash2} tone="analysis-icon-peach" title={row.production_batches?.menu_items?.name ?? 'Food batch'} detail={`${row.reason} · Batch made ${row.production_batches?.production_date ? formatBusinessDate(row.production_batches.production_date) : 'date unavailable'} · ${formatBangkokTime(row.created_at)}`} note={row.notes} amount={`−${formatQuantity(Number(row.quantity))}`} amountLabel="boxes" />)}</div>}
+        {busy ? <LoadingState label="Loading waste details…" /> : waste.length === 0 ? <EmptyState title="No waste recorded today" detail="When food is recorded as waste, its batch, quantity and reason will appear here." /> : <div className="analysis-detail-list">{waste.map((row) => <DetailRow key={row.id} icon={Trash2} tone="analysis-icon-peach" title={formatFoodVariant(row.production_batches?.menu_items?.name, row.production_batches?.meat_options?.name)} detail={`${row.reason} · Batch made ${row.production_batches?.production_date ? formatBusinessDate(row.production_batches.production_date) : 'date unavailable'} · ${formatBangkokTime(row.created_at)}`} note={row.notes} amount={`−${formatQuantity(Number(row.quantity))}`} amountLabel="boxes" />)}</div>}
         {!busy && waste.length > 0 && <div className="analysis-detail-total"><span>Total wasted today</span><strong>{formatQuantity(wasteTotal)} boxes</strong></div>}
         <p className="analysis-panel-note">Waste rate is {wasteRate}{producedTotal > 0 ? `: ${formatQuantity(wasteTotal)} wasted ÷ ${formatQuantity(producedTotal)} produced.` : ' because no production was recorded today.'}</p>
         <Link className="text-link dashboard-detail-link" to="/waste">View waste records</Link>
@@ -138,7 +138,7 @@ export function DashboardPage() {
           {closing.closed_at && <p className="analysis-panel-note">{closingIsValid ? 'Closed' : 'Last closed'} at {formatBangkokTime(closing.closed_at)}{closing.note ? ` · ${closing.note}` : ''}</p>}
           <div className="analysis-detail-list">{closing.closing_batch_counts.map((row) => <article className="analysis-detail-row analysis-closing-row" key={row.production_batch_id}>
             <span className="analysis-detail-icon analysis-icon-lilac"><CalendarCheck size={16} /></span>
-            <div className="analysis-detail-main"><strong>{row.production_batches?.menu_items?.name ?? 'Food batch'}</strong><small>Batch made {row.production_batches?.production_date ? formatBusinessDate(row.production_batches.production_date) : 'date unavailable'}</small><small>Expected {formatQuantity(Number(row.expected_quantity))} · Counted {formatQuantity(Number(row.physical_remaining_quantity))} · Inferred sold {formatQuantity(Number(row.calculated_sold_quantity))}</small>{Number(row.stock_adjustment_quantity) !== 0 && <small className="analysis-detail-note">Adjustment {formatQuantity(Number(row.stock_adjustment_quantity))}{row.adjustment_reason ? ` · ${row.adjustment_reason}` : ''}</small>}</div>
+            <div className="analysis-detail-main"><strong>{formatFoodVariant(row.production_batches?.menu_items?.name, row.production_batches?.meat_options?.name)}</strong><small>Batch made {row.production_batches?.production_date ? formatBusinessDate(row.production_batches.production_date) : 'date unavailable'}</small><small>Available {formatQuantity(Number(row.expected_quantity))} · Left {formatQuantity(Number(row.physical_remaining_quantity))} · Sold {formatQuantity(Number(row.calculated_sold_quantity))}</small>{Number(row.stock_adjustment_quantity) !== 0 && <small className="analysis-detail-note">Adjustment {formatQuantity(Number(row.stock_adjustment_quantity))}{row.adjustment_reason ? ` · ${row.adjustment_reason}` : ''}</small>}</div>
             <span className="analysis-detail-end"><strong>{formatQuantity(Number(row.physical_remaining_quantity))}</strong><small>left</small></span>
           </article>)}</div>
           {!closingIsValid && <p className="analysis-panel-note analysis-panel-note-warning">This closing was reopened. Sales are not included in today’s summary until it is closed again.</p>}

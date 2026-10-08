@@ -1,15 +1,16 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Archive, Check, CirclePlus, Plus, Store, Tags, UtensilsCrossed } from 'lucide-react';
+import { Archive, Check, CirclePlus, Plus, Store, Tags, Trash2, UtensilsCrossed } from 'lucide-react';
 import { EmptyState, LoadingState, Notice } from '../../components/Feedback';
 import { PageTitle } from '../../components/PageTitle';
 import { requireSupabase } from '../../lib/supabase';
 
-type Tab = 'menus' | 'stores' | 'categories' | 'settings';
+type Tab = 'menus' | 'meats' | 'stores' | 'categories' | 'settings';
 interface ManageItem { id: string; name: string; active: boolean; default_shelf_life_days?: number; notes?: string | null; }
 interface Setting { key: string; value: string; }
 
 const tabs: { key: Tab; label: string; icon: typeof Store }[] = [
   { key: 'menus', label: 'Menu items', icon: UtensilsCrossed },
+  { key: 'meats', label: 'Meat options', icon: UtensilsCrossed },
   { key: 'stores', label: 'Stores', icon: Store },
   { key: 'categories', label: 'Expense categories', icon: Tags },
   { key: 'settings', label: 'Settings', icon: Archive },
@@ -37,6 +38,10 @@ export function ManagePage() {
       if (loadError || settingError) setError((loadError ?? settingError)?.message ?? 'Could not load menu settings.');
       setItems((data ?? []) as ManageItem[]);
       if (settingData?.value && Number(settingData.value) >= 1 && Number(settingData.value) <= 30) setShelfLife(String(Number(settingData.value)));
+    } else if (tab === 'meats') {
+      const { data, error: loadError } = await db.from('meat_options').select('id, name, active').order('name');
+      if (loadError) setError(loadError.message);
+      setItems((data ?? []) as ManageItem[]);
     } else if (tab === 'stores') {
       const { data, error: loadError } = await db.from('stores').select('id, name, active').is('deleted_at', null).order('name');
       if (loadError) setError(loadError.message);
@@ -59,21 +64,38 @@ export function ManagePage() {
     const db = requireSupabase();
     let query;
     if (tab === 'menus') query = db.from('menu_items').insert({ name: name.trim(), default_shelf_life_days: Number(shelfLife), active: true });
+    else if (tab === 'meats') query = db.from('meat_options').insert({ name: name.trim(), active: true });
     else if (tab === 'stores') query = db.from('stores').insert({ name: name.trim(), active: true });
     else if (tab === 'categories') query = db.from('expense_categories').insert({ name: name.trim(), active: true });
     else { setSaving(false); return; }
     const { error: saveError } = await query;
     if (saveError) setError(saveError.message);
-    else { setSuccess(`${name.trim()} added.`); setName(''); await load(); }
+    else { setSuccess(`${name.trim()} added${tab === 'meats' ? ' to every menu' : ''}.`); setName(''); await load(); }
     setSaving(false);
   }
 
   async function toggleActive(item: ManageItem) {
     setError(''); setSuccess('');
-    const table = tab === 'menus' ? 'menu_items' : tab === 'stores' ? 'stores' : 'expense_categories';
+    const table = tab === 'menus' ? 'menu_items' : tab === 'meats' ? 'meat_options' : tab === 'stores' ? 'stores' : 'expense_categories';
     const { error: updateError } = await requireSupabase().from(table).update({ active: !item.active }).eq('id', item.id);
     if (updateError) setError(updateError.message);
     else { setSuccess(`${item.name} ${item.active ? 'archived' : 'restored'}.`); await load(); }
+  }
+
+  async function removeMenu(item: ManageItem) {
+    if (!window.confirm(`Permanently remove “${item.name}”? This is only allowed when it has no production history.`)) return;
+    setError(''); setSuccess(''); setSaving(true);
+    const db = requireSupabase();
+    const { data: history, error: historyError } = await db.from('production_batches').select('id').eq('menu_id', item.id).limit(1).maybeSingle();
+    if (historyError) setError(historyError.message);
+    else if (history) setError('This menu has production history, so it cannot be permanently removed. Archive it to hide it from future production and keep its records.');
+    else {
+      const { error: removeError } = await db.from('menu_items').delete().eq('id', item.id);
+      if (removeError?.code === '23503') setError('Production history was added while removing this menu. Archive it instead to preserve those records.');
+      else if (removeError) setError(removeError.message);
+      else { setSuccess(`${item.name} removed. The removal is recorded in the activity log.`); await load(); }
+    }
+    setSaving(false);
   }
 
   async function saveSetting(event: FormEvent<HTMLFormElement>) {
@@ -85,7 +107,7 @@ export function ManagePage() {
     await load(); setSaving(false);
   }
 
-  const title = tab === 'menus' ? 'Menu items' : tab === 'stores' ? 'Stores & sources' : tab === 'categories' ? 'Expense categories' : 'Kitchen settings';
+  const title = tab === 'menus' ? 'Menu items' : tab === 'meats' ? 'Meat options' : tab === 'stores' ? 'Stores & sources' : tab === 'categories' ? 'Expense categories' : 'Kitchen settings';
 
   return <>
     <PageTitle eyebrow="KEEP THE LISTS TIDY" title="Manage" detail="Set the things your team uses every day. Keep familiar names consistent." />
@@ -93,8 +115,9 @@ export function ManagePage() {
       <div className="manage-content"><div className="panel-head"><div><span className="eyebrow">YOUR KITCHEN’S LIBRARY</span><h2>{title}</h2></div><span className="count-chip">{tab === 'settings' ? `${settings.length} SETTINGS` : `${items.length} ITEMS`}</span></div>
         {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
         {busy ? <LoadingState label="Loading your lists…" /> : tab === 'settings' ? <form className="settings-form" onSubmit={saveSetting}>{settings.map((setting) => <label key={setting.key}><span>{setting.key.replaceAll('_', ' ')}</span><input name={setting.key} defaultValue={setting.value} readOnly={['timezone', 'currency'].includes(setting.key)} /></label>)}<div className="settings-footnote">Dates use Bangkok time. Currency is shown in Thai baht.</div><button className="button button-primary" disabled={saving}><Check size={16} />{saving ? 'Saving…' : 'Save settings'}</button></form> : <>
-          {items.length === 0 ? <EmptyState title={`No ${tab} yet`} detail="Add the first one below to make daily records easier for everyone." /> : <div className="manage-list">{items.map((item) => <div className="manage-row" key={item.id}><span className="manage-item-mark">{tab === 'menus' ? <UtensilsCrossed size={17} /> : tab === 'stores' ? <Store size={17} /> : <Tags size={17} />}</span><span className="manage-item-name"><strong>{item.name}</strong>{tab === 'menus' && <small>{item.default_shelf_life_days} day shelf life</small>}</span><span className={`active-label${item.active ? ' is-active' : ''}`}>{item.active ? 'ACTIVE' : 'ARCHIVED'}</span><button className={`button button-small ${item.active ? 'button-quiet' : 'button-plain-green'}`} onClick={() => void toggleActive(item)}>{item.active ? 'Archive' : 'Restore'}</button></div>)}</div>}
-          <form className="inline-add-form" onSubmit={addItem}><span className="inline-add-icon"><CirclePlus size={18} /></span><label>{tab === 'menus' ? 'Menu name' : tab === 'stores' ? 'Store or source name' : 'Category name'}<input required maxLength={80} placeholder={tab === 'menus' ? 'e.g. Chicken rice' : tab === 'stores' ? 'e.g. Makro' : 'e.g. Packaging'} value={name} onChange={(event) => setName(event.target.value)} /></label>{tab === 'menus' && <label>Shelf life in days<input type="number" min="1" max="30" required value={shelfLife} onChange={(event) => setShelfLife(event.target.value)} /></label>}<button className="button button-primary" disabled={saving}><Plus size={16} />{saving ? 'Adding…' : 'Add'}</button></form>
+          {tab === 'meats' && <p className="manage-help">These options are shared by every menu. Each new batch picks one; the menu controls its shelf life.</p>}
+          {items.length === 0 ? <EmptyState title={`No ${tab === 'meats' ? 'meat options' : tab} yet`} detail="Add the first one below to make daily records easier for everyone." /> : <div className="manage-list">{items.map((item) => <div className="manage-row" key={item.id}><span className="manage-item-mark">{tab === 'menus' || tab === 'meats' ? <UtensilsCrossed size={17} /> : tab === 'stores' ? <Store size={17} /> : <Tags size={17} />}</span><span className="manage-item-name"><strong>{item.name}</strong>{tab === 'menus' && <small>{item.default_shelf_life_days} day shelf life</small>}{tab === 'meats' && <small>Shared by every menu</small>}</span><span className={`active-label${item.active ? ' is-active' : ''}`}>{item.active ? 'ACTIVE' : 'ARCHIVED'}</span><button className={`button button-small ${item.active ? 'button-quiet' : 'button-plain-green'}`} onClick={() => void toggleActive(item)} disabled={saving}>{item.active ? 'Archive' : 'Restore'}</button>{tab === 'menus' && <button className="button button-small button-remove" onClick={() => void removeMenu(item)} disabled={saving}><Trash2 size={13} /> Remove</button>}</div>)}</div>}
+          <form className="inline-add-form" onSubmit={addItem}><span className="inline-add-icon"><CirclePlus size={18} /></span><label>{tab === 'menus' ? 'Menu name' : tab === 'meats' ? 'Meat option name' : tab === 'stores' ? 'Store or source name' : 'Category name'}<input required maxLength={tab === 'meats' ? 40 : 80} placeholder={tab === 'menus' ? 'e.g. Hummus' : tab === 'meats' ? 'e.g. Fish' : tab === 'stores' ? 'e.g. Makro' : 'e.g. Packaging'} value={name} onChange={(event) => setName(event.target.value)} /></label>{tab === 'menus' && <label>Shelf life in days<input type="number" min="1" max="30" required value={shelfLife} onChange={(event) => setShelfLife(event.target.value)} /></label>}<button className="button button-primary" disabled={saving}><Plus size={16} />{saving ? 'Adding…' : 'Add'}</button></form>
         </>}
       </div>
     </section>

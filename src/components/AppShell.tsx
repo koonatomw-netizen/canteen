@@ -13,24 +13,25 @@ const links = [
   { to: '/production', label: 'Production', icon: ShoppingBasket },
   { to: '/stock', label: 'Stock & expiry', icon: Boxes },
   { to: '/waste', label: 'Waste', icon: Trash2 },
+  { to: '/closing', label: 'Daily closing', icon: CalendarCheck },
   { to: '/expenses', label: 'Expenses', icon: ReceiptText },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/manage', label: 'Manage', icon: Settings2 },
   { to: '/activity', label: 'Activity log', icon: ClipboardList },
 ];
 
-const mobileLinks = links.filter((link) => ['/', '/stock', '/waste', '/expenses', '/manage'].includes(link.to));
+const mobileLinks = links.filter((link) => ['/', '/stock', '/waste', '/closing', '/manage'].includes(link.to));
 
 export function AppShell() {
   const { member, signOut } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const activeLabel = location.pathname === '/closing' ? 'Daily closing' : links.find((link) => link.to === location.pathname)?.label ?? 'Workspace';
+  const activeLabel = links.find((link) => link.to === location.pathname)?.label ?? 'Workspace';
 
   const navigation = (compact = false) => (
     <nav className={compact ? 'mobile-links' : 'sidebar-links'} aria-label="Main navigation">
       {compact && <p className="sidebar-caption">WORKSPACE</p>}
-      {links.slice(0, 7).map((link) => {
+      {links.slice(0, 8).map((link) => {
         const Icon = link.icon;
         return (
           <NavLink key={link.to} to={link.to} end={link.to === '/'} onClick={() => setMobileOpen(false)} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
@@ -41,7 +42,7 @@ export function AppShell() {
         );
       })}
       <p className="sidebar-caption">MANAGE</p>
-      {links.slice(7).map((link) => {
+      {links.slice(8).map((link) => {
         const Icon = link.icon;
         return (
           <NavLink key={link.to} to={link.to} end={link.to === '/manage'} onClick={() => setMobileOpen(false)} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
@@ -87,7 +88,8 @@ export function AppShell() {
       <nav className="mobile-bottom-nav" aria-label="Quick navigation">
         {mobileLinks.map((link) => {
           const Icon = link.icon;
-          return <NavLink key={link.to} to={link.to} end={link.to === '/'} className={({ isActive }) => `bottom-nav-item${isActive ? ' active' : ''}`}><Icon size={19} /><span>{link.label === 'Stock & expiry' ? 'Stock' : link.label}</span></NavLink>;
+          const label = link.label === 'Stock & expiry' ? 'Stock' : link.to === '/closing' ? 'Close' : link.label;
+          return <NavLink key={link.to} to={link.to} end={link.to === '/'} className={({ isActive }) => `bottom-nav-item${isActive ? ' active' : ''}`}><Icon size={19} /><span>{label}</span></NavLink>;
         })}
       </nav>
     </div>
