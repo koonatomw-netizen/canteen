@@ -382,19 +382,23 @@ a { color: inherit; text-decoration: none; }
 .adjustment-inline { grid-column: 2 / -1; margin: 0; }
 
 @media (max-width: 560px) {
-  .closing-count-head, .closing-batch-row { grid-template-columns: 24px minmax(54px, 1fr) 48px 60px 48px; gap: 4px; }
-  .closing-count-head { font-size: 5.8px; letter-spacing: 0; }
-  .closing-batch-mark { width: 24px; height: 24px; }
-  .closing-batch-info { min-width: 0; }
-  .closing-batch-info strong { font-size: 8px; overflow-wrap: anywhere; }
-  .closing-batch-info small { font-size: 6.5px; }
-  .closing-quantity-cell strong { font-size: 11px; }
-  .closing-quantity-cell small { font-size: 5.5px; letter-spacing: 0; }
-  .closing-quantity-cell > span, .closing-count-label small { display: none; }
-  .closing-count-label { gap: 2px; font-size: 5.5px; letter-spacing: 0; }
-  .closing-count-label input { width: 100%; min-width: 0; padding: 0 2px; font-size: 12px; }
-  .closing-count-head span:first-child { grid-column: 1 / 3; }
-  .adjustment-inline { grid-column: 1 / -1; }
+  .closing-count-head { display: none; }
+  .closing-batch-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: stretch; padding: 11px 0; }
+  .closing-batch-mark { display: none; }
+  .closing-batch-info { grid-column: 1 / -1; min-width: 0; }
+  .closing-batch-info strong { font-size: 10px; overflow-wrap: anywhere; }
+  .closing-batch-info small { font-size: 8px; }
+  .closing-quantity-cell { min-width: 0; min-height: 64px; justify-content: center; padding: 6px 4px; border-radius: 7px; background: #f7f9f6; }
+  .closing-quantity-cell:not(.closing-sold-cell) { grid-column: 1; }
+  .closing-quantity-cell strong { font-size: 14px; }
+  .closing-quantity-cell small { display: block; font-size: 8px; letter-spacing: 0; }
+  .closing-quantity-cell > span { display: block; font-size: 8px; }
+  .closing-count-label { grid-column: 2; align-items: stretch; gap: 5px; color: #708176; font-size: 8px; letter-spacing: 0; }
+  .closing-count-label > span { min-height: 10px; text-align: center; letter-spacing: 0; line-height: 1.2; }
+  .closing-count-label input { width: 100%; min-width: 0; min-height: 44px; padding: 0 4px; font-size: 16px; }
+  .closing-count-label small { display: none; }
+  .closing-sold-cell { grid-column: 3; }
+  .adjustment-inline { grid-column: 1 / -1; margin-left: 0; }
   .manage-row { flex-wrap: wrap; gap: 6px; padding: 7px 0; }
   .manage-row .manage-item-name { flex: 1 1 calc(100% - 45px); }
   .manage-row .active-label { margin-left: 38px; }
