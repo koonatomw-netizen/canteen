@@ -113,6 +113,24 @@ Under **Manage**:
 Daily Closing is an always-visible operational shortcut in the sidebar and
 mobile navigation. Keep administrative pages under Manage.
 
+## 4.1 Department Access
+
+Use four fixed application roles, enforced in both the interface and
+Postgres row-level security:
+
+- **Front** records production, waste, after-close stock removals, and daily
+  closing. Front can view current stock and expenses but cannot change
+  expenses.
+- **Kitchen** records and edits expenses at any time, including after a daily
+  close. Kitchen does not write stock or closing records.
+- **Manager** reads Dashboard and Reports only. Stock figures in a report are
+  read-only; Managers cannot change operational records or reopen a closing.
+- **Website Admin** manages users/roles and shared configuration, can access
+  all pages, and may reopen a closing with a required reason.
+
+New Auth accounts are inactive until a Website Admin assigns a role and
+activates them. Migrate existing `staff` accounts to Front.
+
 ------------------------------------------------------------------------
 
 # 5. Dashboard
@@ -199,10 +217,10 @@ Default shelf life: 3 days
 Status: Active
 ```
 
-Menus with production history cannot be permanently removed and must be
-archived to hide them from future production while preserving their records.
-A menu with no production history may be permanently removed after
-confirmation; the removal is audited.
+Website Admin can permanently remove a menu after confirmation. The menu row
+is deleted and the action is audited; production batches keep a production-time
+menu-name snapshot, so stock, waste, closing, and reports retain their history.
+Removing a menu never deletes its batches or stock movements.
 
 The application must support different shelf lives by menu, even if
 initially many menus use the same shelf life.
@@ -348,11 +366,10 @@ Expires 10 Oct
 
 Staff can distinguish remaining boxes by production batch.
 
-Do **not** force FIFO allocation because staff are able to identify
-which physical batch remains.
-
-The UI may suggest older batches first, but the user must be able to
-choose the actual batch.
+Waste and after-close removal remain linked to the actual batch selected by
+staff. Daily Closing is the exception: staff count one total per menu and
+meat option, so inferred sales are allocated to the oldest production batch
+first as described in Section 12.
 
 Stock should be calculated from the ledger/transactions rather than
 maintained as an independently editable number whenever possible.
@@ -455,6 +472,20 @@ Reason: Refrigerator problem
 Do not require a photo for normal daily waste because that would slow
 down the workflow.
 
+## 11.3 Food Taken After Closing
+
+Record food that leaves stock after a day has been closed in a separate
+**Taken after closing** workflow on the Waste page. The record names the
+batch, quantity, date, reason, and optional note. “Other” requires a note.
+Reasons are configurable by a Website Admin.
+
+This movement reduces current batch stock and appears in dashboard, reports,
+and exports as a separate total. It is not included in Waste quantities or
+the waste rate. Keep the original closing count unchanged as a snapshot of
+the physical count at close. Do not backdate a removal before the latest
+closed day. Archive/restore actions create compensating ledger movements and
+audit events.
+
 ------------------------------------------------------------------------
 
 # 12. Daily Closing
@@ -477,9 +508,19 @@ Available stock (after recorded production and waste)
 = Left at close
 ```
 
-For each batch, show **Available** from the stock ledger (read-only), let
-staff enter **Left at close**, and calculate **Sold**. Do not assume FIFO.
-The selected batch and its menu/meat variant remain visible throughout.
+Group the closing list by menu. Opening a menu shows only its meat options
+that currently have stock. For each menu and meat option, show the sum of
+**Available** boxes from all its batches and ask staff for one **Left at
+close** count. Calculate **Sold** from the aggregate total. Do not expose a
+separate physical count for each batch in the closing workflow.
+
+Assume the front team takes the oldest production batch first. Allocate
+closing-inferred sold quantities in ascending production date, then creation
+time and batch ID. When the physical count is higher than ledger stock,
+require one reason for that menu option and assign the positive adjustment
+to its newest production batch. Keep the resulting closing counts and stock
+movements attached to their individual batches for expiry, waste, reporting,
+and audit history.
 
 Example:
 
@@ -490,27 +531,23 @@ Left at close: 8
 Calculated Sold: 22 (available stock already reflects recorded waste)
 ```
 
-## 12.2 Batch-Level Closing
+## 12.2 Menu and Variant Count
 
-Because staff can distinguish batches, remaining stock should be
-recorded/confirmed at batch level where necessary.
+The menu list should stay compact as the number of options and production
+batches grows. Staff open one menu, then count each in-stock meat option
+inside its on-screen dialog. Multiple batches of the same menu option are
+counted together.
 
 Example:
 
 ``` text
-Chicken Rice
-Meat option: Chicken
-
-Batch 06 Oct
-Expected available: 5
-Remaining: 2
-
-Batch 07 Oct
-Expected available: 20
-Remaining: 8
+Hummus
+  Beef: 7 boxes available, 5 left
+  Pork: 2 boxes available, 2 left
 ```
 
-The system can then correctly carry each batch into the next day.
+The system records the allocation per batch in the stock ledger and carries
+the resulting batch balances into the next day.
 
 ## 12.3 Reconciliation
 
@@ -547,6 +584,9 @@ A day should have a state such as:
 -   Reopened
 
 If a closed day is reopened/edited, record the event in the audit log.
+Only a Website Admin can reopen a closed day. Require a reason and preserve
+the closing's before/after values, actor, timestamp, and reason in the
+read-only Activity Log. Managers remain report-only.
 
 ------------------------------------------------------------------------
 
@@ -579,6 +619,10 @@ Notes:      Weekly ingredients
 Do not require itemized receipt entry.
 
 A Makro receipt for ฿2,223 is stored as one expense.
+
+Only Kitchen and Website Admin can create, edit, archive, or restore
+expenses. Front may review active expenses and private receipts as
+read-only. Managers see expense totals and details through reports.
 
 ## 13.2 Expense Categories
 
@@ -651,6 +695,8 @@ Makro — ฿2,223
 ```
 
 Audit records should not be editable by normal users.
+The Activity Log page is available to Website Admins. Manager reports do
+not grant permission to edit or reopen operational data.
 
 ------------------------------------------------------------------------
 
@@ -708,6 +754,9 @@ Useful visualizations:
 -   Expense by store
 -   Waste by menu
 -   Waste by reason
+
+Managers have read-only access to the reports and may export the available
+CSV datasets. Include after-close stock removals separately from waste.
 
 Keep charts simple and readable.
 
@@ -774,6 +823,30 @@ Exact implementation may vary, but the domain should roughly include:
 -   created_at
 -   updated_at
 -   deleted_at
+
+## `app_members`
+
+-   user_id
+-   email
+-   display_name
+-   role (`front`, `kitchen`, `manager`, or `admin`)
+-   active
+
+New accounts remain inactive until approved by an active Website Admin.
+
+## `post_close_stock_outs`
+
+-   id
+-   removal_date
+-   production_batch_id
+-   quantity
+-   reason
+-   notes
+-   created_at / created_by
+-   deleted_at
+
+Each active record creates a negative stock movement. Archive/restore adds
+an inverse movement; it never edits a stock balance directly.
 
 ## `stores`
 
@@ -909,9 +982,11 @@ THB
 # 20. Important Business Rules
 
 1.  Food can remain in stock across multiple days until expiry.
-2.  Staff can distinguish which production batch remaining boxes belong
-    to.
-3.  Do not blindly allocate remaining/sold stock using FIFO.
+2.  Waste and after-close removal are recorded against the batch staff
+    selects.
+3.  Daily Closing counts one total per menu and meat option, allocates
+    inferred sales to the oldest production batch first, and assigns a
+    positive discrepancy to the newest batch.
 4.  A batch has its own production date and expiry date.
 5.  Default expiry can be generated from the menu shelf life but must be
     editable.
@@ -1042,6 +1117,8 @@ Phase 1 is considered successful when a user can:
 -   Add a new menu.
 -   Add, deactivate, and restore a shared meat option.
 -   Add a new store.
+-   Approve staff accounts and assign Front, Kitchen, Manager, or Website
+    Admin roles.
 -   Record today's food production.
 -   Choose a meat option for each production batch.
 -   Automatically receive a suggested expiry date.
@@ -1050,6 +1127,8 @@ Phase 1 is considered successful when a user can:
 -   See variants as separate batches through Stock, Waste, and Closing.
 -   See expiring and expired batches.
 -   Record waste against a batch.
+-   Record post-close pickups against a batch without inflating waste totals
+    or changing the saved physical closing snapshot.
 -   Add an expense with multiple receipt photos.
 -   Attach multiple photos to a waste record.
 -   Complete daily closing.
@@ -1059,9 +1138,11 @@ Phase 1 is considered successful when a user can:
 -   Record a justified stock adjustment.
 -   View daily/weekly/monthly summaries.
 -   View activity history.
+-   Reopen a day as Website Admin only, with a required reason and audit
+    history.
 -   Safely delete/restore supported records.
--   Permanently remove unused menus, while preserving and archiving menus
-    with production history.
+-   Permanently remove a menu from configuration while keeping all batch and
+    stock history readable under the saved menu-name snapshot.
 -   Export core data.
 -   Complete common workflows comfortably on mobile.
 
@@ -1085,7 +1166,7 @@ Out of scope:
 -   POS integration
 -   AI/OCR receipt reading
 -   Automatic revenue calculation
--   Complex roles and permissions
+-   Custom per-user permission matrices beyond the four fixed roles
 -   Supplier procurement workflow
 -   Automatic historical Google Sheet migration
 

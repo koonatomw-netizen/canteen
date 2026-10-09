@@ -2,10 +2,13 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { Session } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
+export type AppRole = 'admin' | 'manager' | 'front' | 'kitchen';
+
 export interface AppMember {
   user_id: string;
+  email: string | null;
   display_name: string;
-  role: 'admin' | 'manager' | 'staff';
+  role: AppRole;
   active: boolean;
 }
 
@@ -61,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMemberLoading(true);
     void supabase
       .from('app_members')
-      .select('user_id, display_name, role, active')
+      .select('user_id, email, display_name, role, active')
       .eq('user_id', session.user.id)
       .maybeSingle()
       .then(({ data, error }) => {
