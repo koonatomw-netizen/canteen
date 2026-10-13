@@ -9,6 +9,7 @@ import { formatBaht, formatFoodVariant, formatQuantity } from '../../lib/format'
 import { getExpiryStatus } from '../../lib/stock';
 import { requireSupabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
+import { canViewAdminWorkflow } from '../auth/permissions';
 import { useI18n } from '../../lib/i18n';
 
 interface Production { id: string; menu_name_snapshot: string; production_date: string; expiry_date: string; quantity_produced: number; notes: string | null; created_at: string; meat_options: { name: string } | null; }
@@ -56,6 +57,7 @@ function DetailRow({ icon: Icon, title, detail, note, amount, amountLabel, tone 
 export function DashboardPage() {
   const { member } = useAuth();
   const { t } = useI18n();
+  const showWorkflowLinks = canViewAdminWorkflow(member?.role);
   const today = businessDateNow();
   const [range, setRange] = useState<DashboardRange>('today');
   const rangeStart = range === 'today' ? today : range === '7days' ? addCalendarDays(today, -6) : `${today.slice(0, 8)}01`;
@@ -151,7 +153,7 @@ export function DashboardPage() {
       {detailView === 'production' && <section className="panel dashboard-detail-panel">
         <div className="dashboard-detail-context"><span className="count-chip">{production.length} {t('BATCHES')}</span><span className="analysis-panel-note">{selectedRangeText}</span></div>
         {busy ? <LoadingState label="Loading production details…" /> : production.length === 0 ? <EmptyState title="No production in this period" detail="Batches and quantities for the selected dates will appear here." /> : <div className="analysis-detail-list">{production.map((row) => <DetailRow key={row.id} icon={UtensilsCrossed} title={formatFoodVariant(row.menu_name_snapshot, row.meat_options?.name)} detail={`${t('Made')} ${formatBusinessDate(row.production_date)} · ${t('Best before')} ${formatBusinessDate(row.expiry_date)} · ${formatBangkokTime(row.created_at)}`} note={row.notes} amount={formatQuantity(Number(row.quantity_produced))} amountLabel="boxes" />)}</div>}
-        {member?.role === 'admin' && <Link className="text-link dashboard-detail-link" to="/production">{t('View production workflow')}</Link>}
+        {showWorkflowLinks && <Link className="text-link dashboard-detail-link" to="/production">{t('View production workflow')}</Link>}
       </section>}
 
       {detailView === 'waste' && <section className="panel dashboard-detail-panel">
@@ -159,14 +161,14 @@ export function DashboardPage() {
         {busy ? <LoadingState label="Loading waste details…" /> : waste.length === 0 ? <EmptyState title="No waste in this period" detail="Batch, quantity and reason will appear here when staff logs waste." /> : <div className="analysis-detail-list">{waste.map((row) => <DetailRow key={row.id} icon={Trash2} tone="analysis-icon-peach" title={formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name)} detail={`${formatBusinessDate(row.waste_date)} · ${row.reason} · ${t('Batch made')} ${row.production_batches?.production_date ? formatBusinessDate(row.production_batches.production_date) : t('date unavailable')} · ${formatBangkokTime(row.created_at)}`} note={row.notes} amount={`−${formatQuantity(Number(row.quantity))}`} amountLabel="boxes" />)}</div>}
         {!busy && waste.length > 0 && <div className="analysis-detail-total"><span>{t(isToday ? 'Total wasted today' : 'Total wasted in selected period')}</span><strong>{formatQuantity(wasteTotal)} {t('boxes')}</strong></div>}
         <p className="analysis-panel-note">{t('Waste rate is')} {wasteRate}{producedTotal > 0 ? `: ${formatQuantity(wasteTotal)} ${t('wasted')} ÷ ${formatQuantity(producedTotal)} ${t('produced')}.` : ` ${t('because no production was recorded in this period.')}`}</p>
-        {member?.role === 'admin' && <Link className="text-link dashboard-detail-link" to="/waste">{t('View waste workflow')}</Link>}
+        {showWorkflowLinks && <Link className="text-link dashboard-detail-link" to="/waste">{t('View waste workflow')}</Link>}
       </section>}
 
       {detailView === 'stock-out' && <section className="panel dashboard-detail-panel">
         <div className="dashboard-detail-context"><span className="count-chip">{stockOuts.length} {t('REMOVALS')}</span><span className="analysis-panel-note">{t('Not included in waste totals')} · {selectedRangeText}</span></div>
         {busy ? <LoadingState label="Loading after-close stock details…" /> : stockOuts.length === 0 ? <EmptyState title="No food taken after closing in this period" detail="A batch, quantity and reason will appear here when staff records a late pickup." /> : <div className="analysis-detail-list">{stockOuts.map((row) => <DetailRow key={row.id} icon={PackageOpen} tone="analysis-icon-green" title={formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name)} detail={`${formatBusinessDate(row.removal_date)} · ${row.reason} · ${t('Batch made')} ${row.production_batches?.production_date ? formatBusinessDate(row.production_batches.production_date) : t('date unavailable')} · ${formatBangkokTime(row.created_at)}`} note={row.notes} amount={`−${formatQuantity(Number(row.quantity))}`} amountLabel="boxes" />)}</div>}
         {!busy && stockOuts.length > 0 && <div className="analysis-detail-total"><span>{t('Removed after close')}</span><strong>{formatQuantity(stockOutTotal)} {t('boxes')}</strong></div>}
-        {member?.role === 'admin' && <Link className="text-link dashboard-detail-link" to="/waste">{t('View stock-out workflow')}</Link>}
+        {showWorkflowLinks && <Link className="text-link dashboard-detail-link" to="/waste">{t('View stock-out workflow')}</Link>}
       </section>}
 
       {detailView === 'closing' && <section className="panel dashboard-detail-panel">
@@ -180,13 +182,13 @@ export function DashboardPage() {
           </article>)}
           {day.status !== 'closed' && <p className="analysis-panel-note analysis-panel-note-warning">{t('This closing was reopened. Sales are not included in the summary.')}</p>}
         </section>)}</div> : <EmptyState title={isToday ? 'Today is not closed yet' : 'No closing in this period'} detail="Closing counts and inferred sales will appear here after the daily close is completed." />}
-        {member?.role === 'admin' && <Link className="text-link dashboard-detail-link" to="/closing">{t('View daily closing workflow')}</Link>}
+        {showWorkflowLinks && <Link className="text-link dashboard-detail-link" to="/closing">{t('View daily closing workflow')}</Link>}
       </section>}
 
       {detailView === 'expenses' && <section className="panel dashboard-detail-panel">
         <div className="dashboard-detail-context"><span className="count-chip">{expenses.length} {t('PURCHASES')}</span><span className="analysis-panel-note">{selectedRangeText}</span></div>
         {busy ? <LoadingState label="Loading expense details…" /> : expenses.length === 0 ? <EmptyState title="No expenses in this period" detail="Store, category and purchase amount will appear here when logged." /> : <div className="analysis-detail-list">{expenses.map((row) => <DetailRow key={row.id} icon={ReceiptText} title={row.stores?.name ?? 'Other store'} detail={`${row.expense_categories?.name ?? 'Expense'} · ${formatBangkokTime(row.created_at)}`} note={row.notes} amount={formatBaht(row.amount_thb)} amountLabel="THB" />)}</div>}
-        {member?.role === 'admin' && <Link className="text-link dashboard-detail-link" to="/expenses">{t('View expenses workflow')}</Link>}
+        {showWorkflowLinks && <Link className="text-link dashboard-detail-link" to="/expenses">{t('View expenses workflow')}</Link>}
       </section>}
 
       {detailView === 'stock' && <section className="panel dashboard-detail-panel dashboard-stock-detail">
@@ -196,7 +198,7 @@ export function DashboardPage() {
           <div className="analysis-detail-main"><div className="analysis-detail-title"><strong>{row.menu_name}</strong><StatusBadge status={getExpiryStatus(row.expiry_date, today)} /></div><small>{t('Made')} {formatBusinessDate(row.production_date)} · {t('Best before')} {formatBusinessDate(row.expiry_date)}</small><small className="analysis-detail-batch">{t('BATCH')} {row.id.slice(0, 8).toUpperCase()}</small></div>
           <span className="analysis-detail-end"><strong>{formatQuantity(Number(row.quantity_remaining))}</strong><small>{t('boxes')}</small></span>
         </article>)}</div>}
-        {member?.role === 'admin' && <Link className="text-link dashboard-detail-link" to="/stock">{t('View stock workflow')}</Link>}
+        {showWorkflowLinks && <Link className="text-link dashboard-detail-link" to="/stock">{t('View stock workflow')}</Link>}
       </section>}
       </div>
     </dialog>

@@ -6,6 +6,9 @@ type I18nValue = { language: Language; setLanguage: (language: Language) => void
 const languageStorageKey = 'canteen.language';
 
 const thai: Record<string, string> = {
+  'WEBSITE AUDITOR · DEMO VIEW': 'ผู้ตรวจสอบเว็บไซต์ · โหมดสาธิต',
+  'All pages and action buttons are visible. Changes, uploads, and stock actions are disabled for this account.': 'บัญชีนี้เปิดดูได้ทุกหน้าและเห็นปุ่มการทำงาน แต่ปิดการเพิ่ม แก้ไข ลบ อัปโหลดรูป และเปลี่ยนสต็อกทั้งหมด',
+  'View-only demo: changes are disabled.': 'โหมดสาธิตแบบดูอย่างเดียว: ปิดการบันทึกการเปลี่ยนแปลง',
   'FOOD MENU': 'เมนูอาหาร',
   'Record discarded food as Waste before closing so it is not counted as sold.': 'บันทึกอาหารที่ทิ้งเป็นของเสียก่อนปิดวัน เพื่อไม่ให้ระบบนับเป็นยอดขาย',
   'Add a menu': 'เพิ่มเมนูอาหาร',

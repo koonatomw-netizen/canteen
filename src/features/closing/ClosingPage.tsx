@@ -9,6 +9,7 @@ import { readLocalDraft, removeLocalDraft, writeLocalDraft, type DraftSaveStatus
 import { calculateClosing, getBatchBalance, type ClosingResult } from '../../lib/stock';
 import { requireSupabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
+import { isReadOnlyDemo } from '../auth/permissions';
 import { useI18n } from '../../lib/i18n';
 
 interface BatchRow { id: string; menu_name_snapshot: string; meat_option_id: string | null; meat_options: { name: string } | null; stock_movements: { business_date: string; quantity_delta: number }[]; }
@@ -33,6 +34,8 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
   const { member } = useAuth();
   const { t } = useI18n();
   const canEdit = member?.role === 'admin' || member?.role === 'front';
+  const isAuditor = isReadOnlyDemo(member?.role);
+  const showWriteControls = canEdit || isAuditor;
   const [businessDate, setBusinessDate] = useState(businessDateNow());
   const [stock, setStock] = useState<ClosingVariant[]>([]);
   const [counts, setCounts] = useState<Record<string, string>>({});
@@ -59,7 +62,7 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
     ]);
     if (stockResult.error || closingResult.error) setError(stockResult.error?.message ?? closingResult.error?.message ?? 'Could not load the closing count.');
     const latest = (closingResult.data as unknown as Closing | null) ?? null;
-    const savedDraft = latest?.status === 'closed' ? null : readLocalDraft<unknown>(draftKey);
+    const savedDraft = latest?.status === 'closed' || isAuditor ? null : readLocalDraft<unknown>(draftKey);
     const draft = isClosingDraft(savedDraft) ? savedDraft : null;
     const recordedCounts = latest?.status === 'closed'
       ? new Map((latest.closing_batch_counts ?? []).map((row) => [row.production_batch_id, row]))
@@ -117,10 +120,10 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
     setBusy(false);
   }
   const alreadyClosed = closing?.status === 'closed';
-  useEffect(() => { void load(); }, [businessDate]);
+  useEffect(() => { void load(); }, [businessDate, isAuditor]);
 
   useEffect(() => {
-    if (busy || formLoadedDate !== businessDate) return;
+    if (isAuditor || busy || formLoadedDate !== businessDate) return;
     const hasContent = Object.values(counts).some((value) => value !== '') || note.trim().length > 0;
     if (alreadyClosed || !hasContent) {
       removeLocalDraft(draftKey); setDraftStatus('idle'); return;
@@ -130,7 +133,7 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
       setDraftStatus(writeLocalDraft(draftKey, { counts, reasons, note }) ? 'saved' : 'idle');
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [businessDate, counts, reasons, note, alreadyClosed, busy, formLoadedDate, draftKey]);
+  }, [businessDate, counts, reasons, note, alreadyClosed, busy, formLoadedDate, draftKey, isAuditor]);
 
   const results = useMemo(() => {
     return stock.map((variant) => {
@@ -207,11 +210,11 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
   }
 
   return <>
-    {!embedded && <PageTitle eyebrow={canEdit ? 'THE LAST THING BEFORE HOME' : 'READ-ONLY AUDIT'} title="Daily closing" detail={canEdit ? 'Count what’s still in the kitchen. Enter one total for each menu and meat option.' : 'Review the saved closing for any business date. This account cannot change counts.'} />}
+    {!embedded && <PageTitle eyebrow={canEdit ? 'THE LAST THING BEFORE HOME' : 'READ-ONLY AUDIT'} title="Daily closing" detail={canEdit ? 'Count what’s still in the kitchen. Enter one total for each menu and meat option.' : isAuditor ? t('View-only demo: changes are disabled.') : 'Review the saved closing for any business date. This account cannot change counts.'} />}
     {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
-    <div className="closing-date-row"><label>{t('Business day')}<input type="date" value={businessDate} max={businessDateNow()} onChange={(event) => setBusinessDate(event.target.value)} /></label><span className={alreadyClosed ? 'closing-state closed' : 'closing-state'}>{alreadyClosed ? <><CheckCircle2 size={16} /> {t('Day closed')} · {t('version')} {closing.version}</> : <><CalendarCheck size={16} /> {t(!canEdit ? 'Day not closed' : closing?.status === 'reopened' ? 'Reopened · please count again' : 'Ready to count')}</>}</span></div>
+    <div className="closing-date-row"><label>{t('Business day')}<input type="date" value={businessDate} max={businessDateNow()} onChange={(event) => setBusinessDate(event.target.value)} /></label><span className={alreadyClosed ? 'closing-state closed' : 'closing-state'}>{alreadyClosed ? <><CheckCircle2 size={16} /> {t('Day closed')} · {t('version')} {closing.version}</> : <><CalendarCheck size={16} /> {t(showWriteControls ? closing?.status === 'reopened' ? 'Reopened · please count again' : 'Ready to count' : 'Day not closed')}</>}</span></div>
     {busy ? <section className="panel"><LoadingState label="Preparing this day’s count…" /></section> : <div className="closing-layout">
-      {canEdit ? <form className="panel closing-form" onSubmit={submit}>
+      {showWriteControls ? <form className="panel closing-form" onSubmit={submit}>
         <div className="panel-head"><div><span className="eyebrow">{t('PHYSICAL STOCK COUNT')}</span><h2>{t('How many are left?')}</h2></div><span className="form-panel-icon green"><ClipboardCheck size={20} /></span></div>
         {stock.length === 0 ? <EmptyState title="No stock to count" detail="You can close this day with no remaining stock, or record production and return here." /> : <>
           <p className="closing-count-instruction">{t('Choose a menu to count. Only options with stock available today are shown.')}</p>
@@ -226,9 +229,9 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
             </button>;
           })}</div>
         </>}
-        <DraftStatus status={draftStatus} />
-        <label className="closing-note">{t('Note')} <span className="optional-label">{t('OPTIONAL')}</span><textarea rows={2} placeholder={t('Anything unusual about today?')} value={note} onChange={(event) => setNote(event.target.value)} disabled={alreadyClosed} /></label>
-        {!alreadyClosed && <button className="button button-primary closing-submit" disabled={saving || !allCountsEntered || adjustmentMissing}><LockKeyhole size={17} />{saving ? t('Saving closing…') : t('Close this day')}</button>}
+        {canEdit && <DraftStatus status={draftStatus} />}
+        <label className="closing-note">{t('Note')} <span className="optional-label">{t('OPTIONAL')}</span><textarea rows={2} placeholder={t('Anything unusual about today?')} value={note} onChange={(event) => setNote(event.target.value)} disabled={!canEdit || alreadyClosed} /></label>
+        {!alreadyClosed && <button className="button button-primary closing-submit" disabled={!canEdit || saving || !allCountsEntered || adjustmentMissing}><LockKeyhole size={17} />{saving ? t('Saving closing…') : t('Close this day')}</button>}
       </form> : <section className="panel closing-form closing-readonly-panel"><div className="panel-head"><div><span className="eyebrow">{t('READ-ONLY AUDIT')}</span><h2>{t(alreadyClosed ? 'Closing details' : 'No closing recorded')}</h2></div><span className="form-panel-icon green"><ClipboardCheck size={20} /></span></div>
         {stock.length === 0 ? <EmptyState title={alreadyClosed ? 'No stock was recorded for this closing' : 'No stock to review'} detail={t('Choose another business day to inspect its closing record.')} /> : <div className="closing-audit-list">{stock.map((variant) => <article className="closing-audit-row" key={variant.key}><strong>{formatFoodVariant(variant.menu_name, variant.meat_name)}</strong><span>{t('Available')}: {formatQuantity(variant.quantity_available)} {t('boxes')}</span><span>{t('Left at close')}: {variant.recorded ? formatQuantity(variant.recorded.physical) : '—'} {t('boxes')}</span><span>{t('Sold')}: {variant.recorded ? formatQuantity(variant.recorded.sold) : '—'} {t('boxes')}</span>{variant.recorded?.adjustment ? <span>{t('Stock adjustments')}: {formatQuantity(variant.recorded.adjustment)} · {t(variant.adjustment_reason ?? '')}</span> : null}</article>)}</div>}
         {closing?.note && <p className="closing-reopen-note"><strong>{t('Note')}:</strong> {closing.note}</p>}
@@ -238,14 +241,14 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
         <section className="panel close-totals"><span className="eyebrow">{t('END OF DAY')}</span><h2>{t('Here’s the picture.')}</h2><div className="close-total"><span>{t('Boxes still here')}</span><strong>{formatQuantity(remaining)}</strong></div><div className="close-total"><span>{t('Inferred sold')}</span><strong>{formatQuantity(inferredSales)}</strong></div><div className="close-total"><span>{t('Stock adjustments')}</span><strong>{formatQuantity(adjustments)}</strong></div><div className="close-equation">{t('Available stock')} <span>−</span> {t('count')} = {t('sold')}</div>
           {canEdit && !alreadyClosed && <div className="closing-footnote"><AlertTriangle size={15} /><span>{t('Unrecorded losses may look like sales. Record known meals and other losses before closing.')}</span></div>}
           {alreadyClosed && closing?.closed_at && <p className="closed-at">Closed at {new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }).format(new Date(closing.closed_at))} ICT</p>}
-          {alreadyClosed && member?.role === 'admin' && (showReopenForm ? <form className="reopen-reason-form" onSubmit={(event) => { event.preventDefault(); void reopen(); }}><label>{t('Why does this closing need correction?')}<textarea rows={3} maxLength={1000} minLength={3} required value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} placeholder={t('Describe what was counted incorrectly')} /></label><div className="reopen-reason-actions"><button type="button" className="button button-quiet" onClick={() => { setShowReopenForm(false); setReopenReason(''); }}>{t('Cancel')}</button><button className="button button-primary" disabled={saving || reopenReason.trim().length < 3}><RotateCcw size={15} />{saving ? t('Reopening…') : t('Reopen with reason')}</button></div></form> : <button className="button button-quiet reopen-button" onClick={() => setShowReopenForm(true)} disabled={saving}><RotateCcw size={16} /> {t('Reopen day')}</button>)}
+          {alreadyClosed && (member?.role === 'admin' || isAuditor) && (member?.role === 'admin' && showReopenForm ? <form className="reopen-reason-form" onSubmit={(event) => { event.preventDefault(); void reopen(); }}><label>{t('Why does this closing need correction?')}<textarea rows={3} maxLength={1000} minLength={3} required value={reopenReason} onChange={(event) => setReopenReason(event.target.value)} placeholder={t('Describe what was counted incorrectly')} /></label><div className="reopen-reason-actions"><button type="button" className="button button-quiet" onClick={() => { setShowReopenForm(false); setReopenReason(''); }}>{t('Cancel')}</button><button className="button button-primary" disabled={saving || reopenReason.trim().length < 3}><RotateCcw size={15} />{saving ? t('Reopening…') : t('Reopen with reason')}</button></div></form> : <button className="button button-quiet reopen-button" onClick={() => { if (member?.role === 'admin') setShowReopenForm(true); }} disabled={!canEdit || saving}><RotateCcw size={16} /> {t('Reopen day')}</button>)}
           {closing?.status === 'reopened' && closing.reopen_reason && <p className="closing-reopen-note"><strong>{t('Reopened because:')}</strong> {closing.reopen_reason}</p>}
         </section>
         <section className="closing-tip"><span className="tip-number">1</span><span><strong>{t('Count each menu option once.')}</strong><small>{t('All production batches of that option are counted together.')}</small></span></section>
         <section className="closing-tip"><span className="tip-number">2</span><span><strong>{t('Oldest stock is used first.')}</strong><small>{t('Sold boxes are allocated to the oldest production batches automatically.')}</small></span></section>
       </aside>
     </div>}
-    {canEdit && !busy && selectedMenu && <div className="closing-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedMenuKey(null); }}>
+    {showWriteControls && !busy && selectedMenu && <div className="closing-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedMenuKey(null); }}>
       <section className="closing-modal" role="dialog" aria-modal="true" aria-labelledby="closing-modal-title">
         <header className="closing-modal-head"><div><span className="eyebrow">{t('MENU STOCK')}</span><h2 id="closing-modal-title">{selectedMenu.name}</h2><p>{t('Count all boxes of each option together.')}</p></div><button type="button" className="icon-button" aria-label={t('Close count window')} onClick={() => setSelectedMenuKey(null)}><X size={18} /></button></header>
         <div className="closing-count-head"><span>{t('MEAT OPTION')}</span><span>{t('AVAILABLE')}</span><span>{t('LEFT AT CLOSE')}</span><span>{t('SOLD')}</span></div>
@@ -256,12 +259,12 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
             <span className="closing-batch-mark"><CalendarCheck size={16} /></span>
             <div className="closing-batch-info"><strong>{variant.meat_name ?? t('Unspecified option')}</strong><small>{t('All batches combined')}</small></div>
             <div className="closing-quantity-cell"><small>{t('AVAILABLE')}</small><strong>{formatQuantity(variant.quantity_available)}</strong><span>{t('boxes')}</span></div>
-            <label className="closing-count-label"><span>{t('LEFT AT CLOSE')}</span><input aria-label={`${t('Boxes left for')} ${selectedMenu.name} ${variant.meat_name ?? t('option')}`} type="number" min="0" step="1" inputMode="numeric" value={counts[variant.key] ?? ''} onChange={(event) => setCounts((current) => ({ ...current, [variant.key]: event.target.value }))} disabled={alreadyClosed || saving} /><small>{t('boxes')}</small></label>
+            <label className="closing-count-label"><span>{t('LEFT AT CLOSE')}</span><input aria-label={`${t('Boxes left for')} ${selectedMenu.name} ${variant.meat_name ?? t('option')}`} type="number" min="0" step="1" inputMode="numeric" value={counts[variant.key] ?? ''} onChange={(event) => setCounts((current) => ({ ...current, [variant.key]: event.target.value }))} disabled={!canEdit || alreadyClosed || saving} /><small>{t('boxes')}</small></label>
             <div className="closing-quantity-cell closing-sold-cell"><small>{t('SOLD')}</small><strong>{hasPhysicalCount ? formatQuantity(calculation?.sold ?? 0) : '—'}</strong><span>{t('boxes')}</span></div>
-            {calculation && calculation.adjustment > 0 && <div className="adjustment-inline"><AlertTriangle size={15} /><span>{t('Found')} {formatQuantity(calculation.adjustment)} {t('extra. Why?')}</span><select required aria-label={`${t('Reason for extra')} ${selectedMenu.name} ${variant.meat_name ?? t('option')} ${t('stock')}`} value={reasons[variant.key] ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [variant.key]: event.target.value }))} disabled={alreadyClosed || saving}><option value="">{t('Choose a reason')}</option>{adjustmentReasons.map((reason) => <option key={reason}>{t(reason)}</option>)}</select></div>}
+            {calculation && calculation.adjustment > 0 && <div className="adjustment-inline"><AlertTriangle size={15} /><span>{t('Found')} {formatQuantity(calculation.adjustment)} {t('extra. Why?')}</span><select required aria-label={`${t('Reason for extra')} ${selectedMenu.name} ${variant.meat_name ?? t('option')} ${t('stock')}`} value={reasons[variant.key] ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [variant.key]: event.target.value }))} disabled={!canEdit || alreadyClosed || saving}><option value="">{t('Choose a reason')}</option>{adjustmentReasons.map((reason) => <option key={reason}>{t(reason)}</option>)}</select></div>}
           </article>;
         })}</div>
-        <footer className="closing-modal-footer"><span>{selectedMenu.variants.filter((variant) => counts[variant.key] !== undefined && counts[variant.key] !== '').length} {t('of')} {selectedMenu.variants.length} {t('options counted')}</span><button type="button" className="button button-primary" onClick={() => setSelectedMenuKey(null)}>{t(alreadyClosed ? 'Done' : 'Save counts')}</button></footer>
+        <footer className="closing-modal-footer"><span>{selectedMenu.variants.filter((variant) => counts[variant.key] !== undefined && counts[variant.key] !== '').length} {t('of')} {selectedMenu.variants.length} {t('options counted')}</span><button type="button" className="button button-primary" onClick={() => setSelectedMenuKey(null)}>{t(alreadyClosed || isAuditor ? 'Done' : 'Save counts')}</button></footer>
       </section>
     </div>}
   </>;

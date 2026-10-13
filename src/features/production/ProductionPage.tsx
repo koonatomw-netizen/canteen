@@ -9,6 +9,7 @@ import { PageTitle } from '../../components/PageTitle';
 import { DraftStatus } from '../../components/DraftStatus';
 import { useLocalDraft } from '../../lib/localDrafts';
 import { useAuth } from '../auth/AuthContext';
+import { isReadOnlyDemo } from '../auth/permissions';
 import { useI18n } from '../../lib/i18n';
 import { MenuItemsPage } from '../menus/MenuItemsPage';
 
@@ -38,6 +39,7 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
   const { member } = useAuth();
   const { t } = useI18n();
   const canEdit = member?.role === 'admin' || member?.role === 'front';
+  const showWriteControls = canEdit || isReadOnlyDemo(member?.role);
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [meatOptions, setMeatOptions] = useState<MeatOption[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -120,17 +122,17 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
   }
 
   return <>
-    {!embedded && <PageTitle eyebrow={canEdit ? 'FRESH FROM THE KITCHEN' : 'PRODUCTION HISTORY'} title="Production" detail={canEdit ? 'Record today’s prepared food. Every entry creates its own batch.' : 'Review production batches. This account cannot change records.'} action={canEdit ? <button type="button" onClick={() => setShowMenuDialog(true)} className="button button-quiet"><Plus size={17} />{t('Add a menu')}</button> : undefined} />}
+    {!embedded && <PageTitle eyebrow={canEdit ? 'FRESH FROM THE KITCHEN' : 'PRODUCTION HISTORY'} title="Production" detail={canEdit ? 'Record today’s prepared food. Every entry creates its own batch.' : isReadOnlyDemo(member?.role) ? t('View-only demo: changes are disabled.') : 'Review production batches. This account cannot change records.'} action={showWriteControls ? <button type="button" onClick={() => setShowMenuDialog(true)} className="button button-quiet"><Plus size={17} />{t('Add a menu')}</button> : undefined} />}
     {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
     <div className="workflow-grid production-grid">
-      {canEdit && <section className="panel workflow-form-panel"><div className="panel-head"><div><span className="eyebrow">{t('NEW BATCH')}</span><h2>{t('What did you make?')}</h2></div><div className="production-panel-actions"><span className="form-panel-icon"><PackagePlus size={20} /></span>{embedded && <button type="button" className="button button-quiet button-small" onClick={() => setShowMenuDialog(true)}><Plus size={15} />{t('Add a menu')}</button>}</div></div>
+      {showWriteControls && <section className="panel workflow-form-panel"><div className="panel-head"><div><span className="eyebrow">{t('NEW BATCH')}</span><h2>{t('What did you make?')}</h2></div><div className="production-panel-actions"><span className="form-panel-icon"><PackagePlus size={20} /></span>{embedded && <button type="button" className="button button-quiet button-small" onClick={() => setShowMenuDialog(true)}><Plus size={15} />{t('Add a menu')}</button>}</div></div>
         {menus.length === 0 && !busy ? <EmptyState title="Add a menu first" detail="Create a menu here, then record production." /> : meatOptions.length === 0 && !busy ? <EmptyState title="Add a meat option first" detail="Add a shared option such as beef, chicken, pork, or vegan in Manage." /> : <form className="data-form" onSubmit={addBatch}>
-          <div className="form-two-cols"><label>{t('Menu')}<select required value={menuId} onChange={(event) => { const next = event.target.value; setMenuId(next); rememberSelection(next, meatOptionId); }}>{menus.map((menu) => <option key={menu.id} value={menu.id}>{menu.name}</option>)}</select></label><label>{t('Meat option')}<select required value={meatOptionId} onChange={(event) => { const next = event.target.value; setMeatOptionId(next); rememberSelection(menuId, next); }}>{meatOptions.map((meat) => <option key={meat.id} value={meat.id}>{meat.name}</option>)}</select></label></div>
-          <div className="form-two-cols"><label>{t('Boxes prepared')}<input required type="number" min="1" step="1" inputMode="numeric" placeholder={t('e.g. 20')} value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><label>{t('Made on')}<span className="input-icon-wrap"><input required type="date" value={productionDate} onChange={(event) => setProductionDate(event.target.value)} /><CalendarDays size={16} /></span></label></div>
-          <label>{t('Best before')}<input required type="date" min={productionDate} value={expiryDate} onChange={(event) => setExpiryDate(event.target.value)} /><small className="field-help">{t('Suggested from this menu’s shelf life. Change it if this batch needs a different date.')}</small></label>
-          <label>{t('Note')} <span className="optional-label">{t('OPTIONAL')}</span><textarea rows={2} placeholder={t('Anything the next shift should know?')} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
-          <DraftStatus status={draftStatus} />
-          <div className="form-buttons"><button className="button button-primary" disabled={saving || !menuId || !meatOptionId}><Plus size={17} /> {saving ? t('Saving batch…') : t('Record production')}</button><button type="button" className="button button-quiet" onClick={() => void copyYesterday()} disabled={!menus.length || !meatOptions.length}><Copy size={16} /> {t('Copy yesterday')}</button></div>
+          <div className="form-two-cols"><label>{t('Menu')}<select required value={menuId} disabled={!canEdit} onChange={(event) => { const next = event.target.value; setMenuId(next); rememberSelection(next, meatOptionId); }}>{menus.map((menu) => <option key={menu.id} value={menu.id}>{menu.name}</option>)}</select></label><label>{t('Meat option')}<select required value={meatOptionId} disabled={!canEdit} onChange={(event) => { const next = event.target.value; setMeatOptionId(next); rememberSelection(menuId, next); }}>{meatOptions.map((meat) => <option key={meat.id} value={meat.id}>{meat.name}</option>)}</select></label></div>
+          <div className="form-two-cols"><label>{t('Boxes prepared')}<input required type="number" min="1" step="1" inputMode="numeric" placeholder={t('e.g. 20')} value={quantity} disabled={!canEdit} onChange={(event) => setQuantity(event.target.value)} /></label><label>{t('Made on')}<span className="input-icon-wrap"><input required type="date" value={productionDate} disabled={!canEdit} onChange={(event) => setProductionDate(event.target.value)} /><CalendarDays size={16} /></span></label></div>
+          <label>{t('Best before')}<input required type="date" min={productionDate} value={expiryDate} disabled={!canEdit} onChange={(event) => setExpiryDate(event.target.value)} /><small className="field-help">{t('Suggested from this menu’s shelf life. Change it if this batch needs a different date.')}</small></label>
+          <label>{t('Note')} <span className="optional-label">{t('OPTIONAL')}</span><textarea rows={2} placeholder={t('Anything the next shift should know?')} value={notes} disabled={!canEdit} onChange={(event) => setNotes(event.target.value)} /></label>
+          {canEdit && <DraftStatus status={draftStatus} />}
+          <div className="form-buttons"><button className="button button-primary" disabled={!canEdit || saving || !menuId || !meatOptionId}><Plus size={17} /> {saving ? t('Saving batch…') : t('Record production')}</button><button type="button" className="button button-quiet" onClick={() => void copyYesterday()} disabled={!canEdit || !menus.length || !meatOptions.length}><Copy size={16} /> {t('Copy yesterday')}</button></div>
           <p className="form-footnote"><span /> {t('Quantities are checked against stock before any future deduction.')}</p>
         </form>}
       </section>}
@@ -139,7 +141,7 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
       </section>
     </div>
     <section className="workflow-tip"><span className="tip-icon"><CalendarDays size={16} /></span><span><strong>{t('Carrying stock over?')}</strong> {t('Remaining stock carries over automatically. Record only newly prepared food; do not re-enter leftovers.')}</span><ArrowRight size={16} /></section>
-    {canEdit && showMenuDialog && <MenuItemsPage dialog onClose={() => setShowMenuDialog(false)} onCreated={(menu) => {
+    {showWriteControls && showMenuDialog && <MenuItemsPage dialog onClose={() => setShowMenuDialog(false)} onCreated={(menu) => {
       setMenus((current) => current.some((item) => item.id === menu.id) ? current : [...current, menu].sort((a, b) => a.name.localeCompare(b.name)));
       setMenuId(menu.id);
       setShowMenuDialog(false);

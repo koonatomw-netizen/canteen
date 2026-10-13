@@ -10,6 +10,7 @@ import { getExpiryStatus, type ExpiryStatus } from '../../lib/stock';
 import { requireSupabase } from '../../lib/supabase';
 import { useI18n } from '../../lib/i18n';
 import { useAuth } from '../auth/AuthContext';
+import { isReadOnlyDemo } from '../auth/permissions';
 
 interface StockRow { id: string; menu_id: string; menu_name: string; production_date: string; expiry_date: string; quantity_remaining: number; }
 
@@ -17,6 +18,7 @@ export function StockPage({ embedded = false }: { embedded?: boolean }) {
   const { member } = useAuth();
   const { t } = useI18n();
   const canEdit = member?.role === 'admin' || member?.role === 'front';
+  const showWriteControls = canEdit || isReadOnlyDemo(member?.role);
   const [rows, setRows] = useState<StockRow[]>([]);
   const [filter, setFilter] = useState<'all' | ExpiryStatus>('all');
   const [search, setSearch] = useState('');
@@ -42,7 +44,7 @@ export function StockPage({ embedded = false }: { embedded?: boolean }) {
   const urgentBoxes = rows.filter((row) => ['today', 'expired'].includes(getExpiryStatus(row.expiry_date, today))).reduce((sum, row) => sum + Number(row.quantity_remaining), 0);
 
   return <>
-    {!embedded && <PageTitle eyebrow="WHAT’S READY TO SELL" title="Stock & expiry" detail="See every box by batch, so you know what’s on hand and what needs attention." action={canEdit ? <Link to="/production" className="button button-primary"><Boxes size={17} /> Add production</Link> : undefined} />}
+    {!embedded && <PageTitle eyebrow="WHAT’S READY TO SELL" title="Stock & expiry" detail="See every box by batch, so you know what’s on hand and what needs attention." action={showWriteControls ? <Link to="/production" className="button button-primary"><Boxes size={17} /> Add production</Link> : undefined} />}
     {error && <Notice>{error}</Notice>}
     <section className="stock-summary-row"><div className="stock-summary-card"><span className="summary-icon summary-green"><PackageOpen size={18} /></span><span><small>{t('ON HAND')}</small><strong>{busy ? '—' : formatQuantity(totalBoxes)} {t('boxes')}</strong></span><span className="summary-note">{t('Across')} {rows.length} {t('batches')}</span></div><div className="stock-summary-card"><span className="summary-icon summary-peach"><CircleAlert size={18} /></span><span><small>{t('NEEDS ATTENTION')}</small><strong>{busy ? '—' : formatQuantity(urgentBoxes)} {t('boxes')}</strong></span><span className="summary-note">{t('Expired or expires today')}</span></div><div className="stock-summary-card"><span className="summary-icon summary-blue"><Filter size={18} /></span><span><small>{t('EXPIRY CHECK')}</small><strong>{formatBusinessDate(today)}</strong></span><span className="summary-note">{t('Based on Bangkok time')}</span></div></section>
     <section className="panel stock-full-panel"><div className="stock-tools"><div className="panel-head"><div><span className="eyebrow">{t('BATCH BY BATCH')}</span><h2>{t('Available stock')}</h2></div><span className="count-chip">{filtered.length} {t('SHOWING')}</span></div><div className="stock-search"><Search size={16} /><input aria-label={t('Search menu items')} placeholder={t('Find a menu item')} value={search} onChange={(event) => setSearch(event.target.value)} /></div></div>

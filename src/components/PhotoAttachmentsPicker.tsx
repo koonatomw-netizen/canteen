@@ -8,15 +8,16 @@ interface Props {
   label: string;
   hint: string;
   maxFiles?: number;
+  disabled?: boolean;
 }
 
-export function PhotoAttachmentsPicker({ files, onChange, label, hint, maxFiles = 8 }: Props) {
+export function PhotoAttachmentsPicker({ files, onChange, label, hint, maxFiles = 8, disabled = false }: Props) {
   const { t } = useI18n();
   const previews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files]);
   useEffect(() => () => previews.forEach(({ url }) => URL.revokeObjectURL(url)), [previews]);
 
   function addFiles(selection: FileList | null) {
-    if (!selection) return;
+    if (disabled || !selection) return;
     const incoming = Array.from(selection).filter((candidate) => candidate.type.startsWith('image/'));
     const combined = [...files];
     for (const file of incoming) {
@@ -31,15 +32,15 @@ export function PhotoAttachmentsPicker({ files, onChange, label, hint, maxFiles 
       <span className="photo-pick-icon"><ImagePlus size={19} /></span>
       <span className="photo-pick-copy"><strong>{t(label)}</strong><small>{t(hint)} · {t('up to')} {maxFiles}</small></span>
       <div className="photo-pick-actions">
-        <label className="button button-quiet photo-source-button"><Camera size={15} />{t('Take photo')}<input type="file" accept="image/*" capture="environment" disabled={files.length >= maxFiles} onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ''; }} /></label>
-        <label className="button button-quiet photo-source-button"><Images size={15} />{t('Choose photos')}<input type="file" accept="image/*" multiple disabled={files.length >= maxFiles} onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ''; }} /></label>
+        <label className="button button-quiet photo-source-button" aria-disabled={disabled}><Camera size={15} />{t('Take photo')}<input type="file" accept="image/*" capture="environment" disabled={disabled || files.length >= maxFiles} onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ''; }} /></label>
+        <label className="button button-quiet photo-source-button" aria-disabled={disabled}><Images size={15} />{t('Choose photos')}<input type="file" accept="image/*" multiple disabled={disabled || files.length >= maxFiles} onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ''; }} /></label>
       </div>
     </div>
     {files.length > 0 && <div className="photo-attachment-list" aria-label="Selected photos">
       {previews.map(({ file, url }, index) => <div className="photo-attachment" key={`${file.name}-${file.size}-${file.lastModified}`}>
         <img src={url} alt={`Preview ${file.name}`} />
         <span title={file.name}>{file.name}</span>
-        <button type="button" className="icon-button small" aria-label={`Remove ${file.name}`} onClick={() => onChange(files.filter((_, itemIndex) => itemIndex !== index))}><X size={14} /></button>
+        <button type="button" className="icon-button small" aria-label={`Remove ${file.name}`} disabled={disabled} onClick={() => onChange(files.filter((_, itemIndex) => itemIndex !== index))}><X size={14} /></button>
       </div>)}
     </div>}
   </div>;

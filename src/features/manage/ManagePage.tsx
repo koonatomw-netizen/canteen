@@ -8,7 +8,7 @@ import { PageTitle } from '../../components/PageTitle';
 import { useI18n } from '../../lib/i18n';
 import { requireSupabase } from '../../lib/supabase';
 import { useAuth, type AppRole } from '../auth/AuthContext';
-import { roleLabels } from '../auth/permissions';
+import { isReadOnlyDemo, roleLabels } from '../auth/permissions';
 
 type Tab = 'users' | 'menus' | 'meats' | 'stores' | 'categories' | 'waste-reasons' | 'stock-out-reasons' | 'settings';
 interface ManageItem { id: string; name: string; active: boolean; default_shelf_life_days?: number; notes?: string | null; }
@@ -38,6 +38,8 @@ export function ManagePage() {
   const { t } = useI18n();
   const { member } = useAuth();
   const canManage = member?.role === 'admin';
+  const isAuditor = isReadOnlyDemo(member?.role);
+  const showAdminControls = canManage || isAuditor;
   const [tab, setTab] = useState<Tab>('users');
   const [items, setItems] = useState<ManageItem[]>([]);
   const [settings, setSettings] = useState<Setting[]>([]);
@@ -174,7 +176,7 @@ export function ManagePage() {
               : tab === 'stock-out-reasons' ? 'After-close removal reasons' : 'Kitchen settings';
 
   return <>
-    <PageTitle eyebrow={canManage ? 'YOUR SYSTEM, YOUR RULES' : 'READ-ONLY AUDIT'} title="Manage" detail={canManage ? 'Manage accounts and update the lists your team uses, without changing code.' : 'Review user access, menu settings, and reference lists. This account cannot change them.'} />
+    <PageTitle eyebrow={canManage ? 'YOUR SYSTEM, YOUR RULES' : 'READ-ONLY AUDIT'} title="Manage" detail={canManage ? 'Manage accounts and update the lists your team uses, without changing code.' : isAuditor ? t('View-only demo: changes are disabled.') : 'Review user access, menu settings, and reference lists. This account cannot change them.'} />
     <section className="panel manage-panel"><div className="manage-tabs" role="tablist" aria-label={t('Manage settings')}>{tabs.map(({ key, label, icon: Icon }) => <button type="button" role="tab" aria-selected={tab === key} key={key} className={`manage-tab${tab === key ? ' active' : ''}`} onClick={() => { setTab(key); setError(''); setSuccess(''); }}><Icon size={17} />{t(label)}</button>)}</div>
       <div className="manage-content"><div className="panel-head"><div><span className="eyebrow">{t(canManage ? 'WEBSITE ADMIN' : 'READ-ONLY AUDIT')}</span><h2>{t(title)}</h2></div><span className="count-chip">{busy ? t('LOADING') : tab === 'settings' ? `${settings.length} ${t('SETTINGS')}` : tab === 'users' ? `${members.length} ${t('ACCOUNTS')}` : `${items.length} ${t('ITEMS')}`}</span></div>
         {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
@@ -188,14 +190,14 @@ export function ManagePage() {
                <div className="member-admin-identity"><span className="member-admin-avatar">{(edit.display_name ?? user.display_name).slice(0, 1).toUpperCase()}</span><div><input className="member-name-input" aria-label={`${t('Display name for')} ${user.email ?? user.display_name}`} readOnly={!canManage} maxLength={80} value={edit.display_name ?? user.display_name} onChange={(event) => editMember(user, { display_name: event.target.value })} /><small>{user.email ?? t('No email on account')}{isSelf ? ` · ${t('You')}` : ''}</small></div></div>
                <label className="member-role-field">{t('Role')}<select value={edit.role ?? user.role} disabled={!canManage || isSelf} onChange={(event) => editMember(user, { role: event.target.value as AppRole })}>{roleOptions.map((role) => <option key={role} value={role}>{t(roleLabels[role])}</option>)}</select></label>
                <label className="member-active-field"><input type="checkbox" checked={edit.active ?? user.active} disabled={!canManage || isSelf} onChange={(event) => editMember(user, { active: event.target.checked })} /><span>{t((edit.active ?? user.active) ? 'Active' : 'Access off')}</span></label>
-               {canManage && <button className="button button-quiet button-small" disabled={saving || !changed} onClick={() => void saveMember(user)}><Check size={14} />{t('Save')}</button>}
+               {showAdminControls && <button className="button button-quiet button-small" disabled={!canManage || saving || !changed} onClick={() => void saveMember(user)}><Check size={14} />{t('Save')}</button>}
             </div>;
           })}</div>}
           <div className="manage-side-note"><UserRoundCog size={16} /><span>{t(canManage ? 'Accounts are created through staff sign-up. The Website Admin controls app access and role assignment here; no service key is used in the browser.' : 'This account can inspect member roles and access status, but cannot change them.')}</span></div>
         </> : tab === 'settings' ? <form className="settings-form" onSubmit={(event) => { if (!canManage) { event.preventDefault(); return; } void saveSetting(event); }}>
           {settings.map((setting) => <label key={setting.key}><span>{setting.key.replaceAll('_', ' ')}</span><input name={setting.key} type={setting.key === 'default_shelf_life_days' ? 'number' : 'text'} min={setting.key === 'default_shelf_life_days' ? 1 : undefined} max={setting.key === 'default_shelf_life_days' ? 30 : undefined} defaultValue={setting.value} readOnly={!canManage || ['timezone', 'currency'].includes(setting.key)} required={setting.key === 'default_shelf_life_days'} /></label>)}
           <div className="settings-footnote">{t('Bangkok time and Thai baht stay fixed for consistent daily reports. Default shelf life applies to new menus; existing menu shelf lives remain separately editable.')}</div>
-          {canManage && <button className="button button-primary" disabled={saving}><Check size={16} />{saving ? t('Saving…') : t('Save settings')}</button>}
+          {showAdminControls && <button className="button button-primary" disabled={!canManage || saving}><Check size={16} />{saving ? t('Saving…') : t('Save settings')}</button>}
         </form> : <>
           {tab === 'meats' && <p className="manage-help">{t('These options are shared by every menu. Each new batch picks one; its menu controls shelf life.')}</p>}
           {tab === 'waste-reasons' && <p className="manage-help">{t('Only actual discarded food belongs here. Choose “Other” with a note for details.')}</p>}
@@ -207,11 +209,11 @@ export function ManagePage() {
               {tab === 'meats' && <small>{t('Shared by every menu')}</small>}
             </span>
             <span className={`active-label${item.active ? ' is-active' : ''}`}>{t(item.active ? 'ACTIVE' : 'INACTIVE')}</span>
-            {canManage && (editingId === item.id ? <><button className="button button-primary button-small" onClick={() => void saveItem(item)} disabled={saving || !editName.trim()}><Check size={13} />{t('Save')}</button><button className="button button-quiet button-small" onClick={() => setEditingId(null)}>{t('Cancel')}</button></> : <button className="button button-quiet button-small" onClick={() => beginEdit(item)}>{t('Edit')}</button>)}
-            {canManage && <button className={`button button-small ${item.active ? 'button-quiet' : 'button-plain-green'}`} onClick={() => void toggleActive(item)} disabled={saving}>{t(item.active ? 'Deactivate' : 'Restore')}</button>}
-            {canManage && tab === 'menus' && <button className="button button-small button-remove" onClick={() => void removeMenu(item)} disabled={saving}><Trash2 size={13} />{t('Remove')}</button>}
+            {showAdminControls && (editingId === item.id ? <><button className="button button-primary button-small" onClick={() => void saveItem(item)} disabled={!canManage || saving || !editName.trim()}><Check size={13} />{t('Save')}</button><button className="button button-quiet button-small" onClick={() => setEditingId(null)} disabled={!canManage}>{t('Cancel')}</button></> : <button className="button button-quiet button-small" onClick={() => beginEdit(item)} disabled={!canManage}>{t('Edit')}</button>)}
+            {showAdminControls && <button className={`button button-small ${item.active ? 'button-quiet' : 'button-plain-green'}`} onClick={() => void toggleActive(item)} disabled={!canManage || saving}>{t(item.active ? 'Deactivate' : 'Restore')}</button>}
+            {showAdminControls && tab === 'menus' && <button className="button button-small button-remove" onClick={() => void removeMenu(item)} disabled={!canManage || saving}><Trash2 size={13} />{t('Remove')}</button>}
           </div>)}</div>}
-          {canManage && <form className="inline-add-form" onSubmit={addItem}><span className="inline-add-icon"><CirclePlus size={18} /></span><label>{t(tab === 'menus' ? 'Menu name' : tab === 'meats' ? 'Meat option name' : tab === 'stores' ? 'Store or source name' : tab === 'categories' ? 'Category name' : 'Reason name')}<input required maxLength={80} placeholder={t(tab === 'menus' ? 'e.g. Hummus' : tab === 'meats' ? 'e.g. Fish' : tab === 'stores' ? 'e.g. Makro' : tab === 'categories' ? 'e.g. Packaging' : tab === 'waste-reasons' ? 'e.g. Over-prepared' : 'e.g. Owner pickup')} value={name} onChange={(event) => setName(event.target.value)} /></label>{tab === 'menus' && <label>{t('Shelf life in days')}<input type="number" min="1" max="30" required value={shelfLife} onChange={(event) => setShelfLife(event.target.value)} /></label>}<button className="button button-primary" disabled={saving}><Plus size={16} />{saving ? t('Adding…') : t('Add')}</button></form>}
+          {showAdminControls && <form className="inline-add-form" onSubmit={addItem}><span className="inline-add-icon"><CirclePlus size={18} /></span><label>{t(tab === 'menus' ? 'Menu name' : tab === 'meats' ? 'Meat option name' : tab === 'stores' ? 'Store or source name' : tab === 'categories' ? 'Category name' : 'Reason name')}<input required maxLength={80} disabled={!canManage} placeholder={t(tab === 'menus' ? 'e.g. Hummus' : tab === 'meats' ? 'e.g. Fish' : tab === 'stores' ? 'e.g. Makro' : tab === 'categories' ? 'e.g. Packaging' : tab === 'waste-reasons' ? 'e.g. Over-prepared' : 'e.g. Owner pickup')} value={name} onChange={(event) => setName(event.target.value)} /></label>{tab === 'menus' && <label>{t('Shelf life in days')}<input type="number" min="1" max="30" required disabled={!canManage} value={shelfLife} onChange={(event) => setShelfLife(event.target.value)} /></label>}<button className="button button-primary" disabled={!canManage || saving}><Plus size={16} />{saving ? t('Adding…') : t('Add')}</button></form>}
         </>}
       </div>
     </section>

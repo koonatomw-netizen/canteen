@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canAccessRoute, homePathForRole } from './permissions';
+import { canAccessRoute, canViewAdminWorkflow, homePathForRole, isReadOnlyDemo } from './permissions';
 
 describe('role access', () => {
   it('keeps managers in the read-only analysis area', () => {
@@ -35,6 +35,11 @@ describe('role access', () => {
     for (const path of ['/', '/production', '/menus', '/stock', '/waste', '/closing', '/expenses', '/reports', '/manage', '/activity']) {
       expect(canAccessRoute('auditor', path)).toBe(true);
     }
+    expect(isReadOnlyDemo('auditor')).toBe(true);
+    expect(canViewAdminWorkflow('auditor')).toBe(true);
+    expect(isReadOnlyDemo('admin')).toBe(false);
+    expect(canViewAdminWorkflow('admin')).toBe(true);
+    expect(canViewAdminWorkflow('manager')).toBe(false);
   });
 
   it('sends each role to its main workspace', () => {

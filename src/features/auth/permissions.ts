@@ -25,6 +25,14 @@ export function canAccessRoute(role: AppRole, path: string): boolean {
   return routeRoles[path]?.includes(role) ?? false;
 }
 
+export function isReadOnlyDemo(role: AppRole | null | undefined): boolean {
+  return role === 'auditor';
+}
+
+export function canViewAdminWorkflow(role: AppRole | null | undefined): boolean {
+  return role === 'admin' || isReadOnlyDemo(role);
+}
+
 export function homePathForRole(role: AppRole): string {
   void role;
   return '/';

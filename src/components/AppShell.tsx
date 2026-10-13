@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   Archive, BarChart3, Boxes, CalendarCheck, ChevronDown, ClipboardList,
-  LayoutDashboard, LogOut, Menu, ReceiptText, Settings2, ShoppingBasket,
+  LayoutDashboard, LogOut, Menu, ReceiptText, Settings2, ShieldCheck, ShoppingBasket,
   Trash2, UtensilsCrossed, X,
 } from 'lucide-react';
 import { useAuth } from '../features/auth/AuthContext';
 import type { AppRole } from '../features/auth/AuthContext';
-import { roleLabels } from '../features/auth/permissions';
+import { isReadOnlyDemo, roleLabels } from '../features/auth/permissions';
 import { businessDateNow, formatBusinessDate } from '../lib/dates';
 import { useI18n } from '../lib/i18n';
 import { LanguageToggle } from './LanguageToggle';
@@ -32,7 +32,7 @@ const mobileLinkOrder: Record<AppRole, string[]> = {
   manager: ['/'],
   front: ['/'],
   kitchen: ['/', '/expenses'],
-  auditor: ['/', '/stock', '/reports', '/activity'],
+  auditor: ['/', '/stock', '/waste', '/closing', '/manage'],
 };
 
 export function AppShell() {
@@ -105,7 +105,10 @@ export function AppShell() {
           </div>
           <div className="topbar-right"><LanguageToggle /><span className="date-pill"><CalendarCheck size={15} />{formatBusinessDate(businessDateNow())}</span><span className="topbar-divider" /><span className="topbar-user">{member?.display_name || 'Staff member'}</span><span className="topbar-avatar">{(member?.display_name || 'S').slice(0, 1).toUpperCase()}</span></div>
         </header>
-        <div className="page-content"><Outlet /></div>
+        <div className="page-content" data-readonly-demo={isReadOnlyDemo(role) ? 'true' : undefined}>
+          {isReadOnlyDemo(role) && <div className="readonly-demo-banner" role="status"><ShieldCheck size={18} /><span><strong>{t('WEBSITE AUDITOR · DEMO VIEW')}</strong><small>{t('All pages and action buttons are visible. Changes, uploads, and stock actions are disabled for this account.')}</small></span></div>}
+          <Outlet />
+        </div>
       </main>
       <nav className="mobile-bottom-nav" aria-label={t('Quick navigation')}>
         {mobileLinks.map((link) => {

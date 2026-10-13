@@ -7,6 +7,7 @@ import { useI18n } from '../../lib/i18n';
 import { requireSupabase } from '../../lib/supabase';
 import { parseMenuInput } from './menuValidation';
 import { useAuth } from '../auth/AuthContext';
+import { isReadOnlyDemo } from '../auth/permissions';
 
 interface MenuItem { id: string; name: string; default_shelf_life_days: number; notes: string | null; }
 interface MenuItemsPageProps { dialog?: boolean; onClose?: () => void; onCreated?: (menu: MenuItem) => void; }
@@ -15,6 +16,7 @@ export function MenuItemsPage({ dialog = false, onClose, onCreated }: MenuItemsP
   const { member } = useAuth();
   const { t } = useI18n();
   const canEdit = member?.role === 'admin' || member?.role === 'front';
+  const showWriteControls = canEdit || isReadOnlyDemo(member?.role);
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [name, setName] = useState('');
   const [shelfLife, setShelfLife] = useState('3');
@@ -72,14 +74,14 @@ export function MenuItemsPage({ dialog = false, onClose, onCreated }: MenuItemsP
   }
 
   const menuForm = <form className="data-form menu-create-form" onSubmit={addMenu}>
-    <label>{t('Menu name')}<input required maxLength={100} value={name} disabled={saving} onChange={(event) => setName(event.target.value)} placeholder={t('e.g. Hummus')} /></label>
-    <label>{t('Default shelf life in days')}<input required type="number" min="1" max="30" step="1" inputMode="numeric" value={shelfLife} disabled={saving} onChange={(event) => setShelfLife(event.target.value)} /><small className="field-help">{t('Used to suggest expiry for new batches. Existing batches keep their expiry dates.')}</small></label>
-    <label>{t('Note')} <span className="optional-label">{t('OPTIONAL')}</span><textarea maxLength={2000} value={notes} disabled={saving} onChange={(event) => setNotes(event.target.value)} /></label>
-    <button className="button button-primary" disabled={busy || saving}><Plus size={18} />{t(saving ? 'Saving…' : 'Add a menu')}</button>
+    <label>{t('Menu name')}<input required maxLength={100} value={name} disabled={!canEdit || saving} onChange={(event) => setName(event.target.value)} placeholder={t('e.g. Hummus')} /></label>
+    <label>{t('Default shelf life in days')}<input required type="number" min="1" max="30" step="1" inputMode="numeric" value={shelfLife} disabled={!canEdit || saving} onChange={(event) => setShelfLife(event.target.value)} /><small className="field-help">{t('Used to suggest expiry for new batches. Existing batches keep their expiry dates.')}</small></label>
+    <label>{t('Note')} <span className="optional-label">{t('OPTIONAL')}</span><textarea maxLength={2000} value={notes} disabled={!canEdit || saving} onChange={(event) => setNotes(event.target.value)} /></label>
+    <button className="button button-primary" disabled={!canEdit || busy || saving}><Plus size={18} />{t(saving ? 'Saving…' : 'Add a menu')}</button>
     <p className="field-help">{t('Adding a menu does not add food to stock. Record production when new food is prepared.')}</p>
   </form>;
 
-  if (dialog && canEdit) return <div className="menu-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
+  if (dialog && showWriteControls) return <div className="menu-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
     <section className="menu-create-dialog" role="dialog" aria-modal="true" aria-labelledby="menu-dialog-title">
       <header className="menu-create-dialog-head"><div><span className="eyebrow">{t('FOOD MENU')}</span><h2 id="menu-dialog-title">{t('Add a menu')}</h2><p>{t('All meat options share the menu’s shelf life.')}</p></div><button type="button" className="icon-button" aria-label={t('Close')} onClick={onClose}><X size={18} /></button></header>
       {error && <Notice>{error}</Notice>}{created && <Notice tone="success">{t('Menu added. It is ready to use in Production.')}</Notice>}
@@ -88,11 +90,11 @@ export function MenuItemsPage({ dialog = false, onClose, onCreated }: MenuItemsP
   </div>;
 
   return <>
-    <PageTitle eyebrow="FOOD MENU" title="Menu items" detail={canEdit ? 'Add menus for the team. All meat options share the menu’s shelf life.' : 'Review the available menu list. This account cannot change menu settings.'} action={canEdit ? <Link className="button button-quiet" to="/production">{t('Open production')}</Link> : undefined} />
+    <PageTitle eyebrow="FOOD MENU" title="Menu items" detail={canEdit ? 'Add menus for the team. All meat options share the menu’s shelf life.' : isReadOnlyDemo(member?.role) ? t('View-only demo: changes are disabled.') : 'Review the available menu list. This account cannot change menu settings.'} action={showWriteControls ? <Link className="button button-quiet" to="/production">{t('Open production')}</Link> : undefined} />
     {error && <Notice>{error}</Notice>}
     {created && <div className="menu-created" role="status"><Notice tone="success">{t('Menu added. It is ready to use in Production.')}</Notice><Link className="button button-primary" to={'/production?menu=' + created.id}>{t('Record production')}</Link></div>}
     <div className="menu-create-layout">
-      {canEdit && <section className="panel"><div className="panel-head"><h2>{t('Add a menu')}</h2><UtensilsCrossed size={20} /></div>{menuForm}</section>}
+      {showWriteControls && <section className="panel"><div className="panel-head"><h2>{t('Add a menu')}</h2><UtensilsCrossed size={20} /></div>{menuForm}</section>}
       <section className="panel"><div className="panel-head"><h2>{t('Available menus')}</h2><span className="count-chip">{menus.length}</span></div>
         {busy ? <LoadingState /> : menus.length === 0 ? <EmptyState title="No menus yet" detail={canEdit ? 'Add the first menu using the form.' : 'There are no active menus.'} /> : <ul className="menu-item-list">{menus.map((menu) => <li key={menu.id}><strong>{menu.name}</strong><span>{menu.default_shelf_life_days} {t('day shelf life')}</span>{menu.notes && <p>{menu.notes}</p>}</li>)}</ul>}
         {canEdit && <p className="field-help">{t('Contact the admin to edit, deactivate, or remove an existing menu.')}</p>}
