@@ -24,6 +24,17 @@ describe('batch stock rules', () => {
     expect(getExpiryStatus('2026-10-09', '2026-10-07')).toBe('normal');
   });
 
+  it('carries closing leftovers across days, including expiry, until a movement removes them', () => {
+    const movements = [
+      { business_date: '2026-10-07', quantity_delta: 20 },
+      { business_date: '2026-10-07', quantity_delta: -12 },
+      { business_date: '2026-10-09', quantity_delta: -2 },
+    ];
+    expect(getBatchBalance(movements, '2026-10-08')).toBe(8);
+    expect(getExpiryStatus('2026-10-07', '2026-10-08')).toBe('expired');
+    expect(getBatchBalance(movements, '2026-10-09')).toBe(6);
+  });
+
   it('detects a ledger balance below zero', () => {
     expect(hasNegativeStock([{ business_date: '2026-10-07', quantity_delta: -1 }])).toBe(true);
     expect(hasNegativeStock([{ business_date: '2026-10-07', quantity_delta: 1 }])).toBe(false);

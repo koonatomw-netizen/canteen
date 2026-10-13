@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Archive, Eye, EyeOff, LockKeyhole } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Notice } from '../../components/Feedback';
 import { LanguageToggle } from '../../components/LanguageToggle';
@@ -67,8 +67,7 @@ export function LoginPage() {
 
   return (
     <div className="auth-screen">
-      <div className="auth-visual"><div className="auth-visual-grain" /><div className="auth-visual-content"><div className="brand brand-on-dark"><span className="brand-mark"><Archive size={21} /></span><span className="brand-name">canteen<span>{t('daily operations')}</span></span></div><div className="auth-quote"><span className="auth-kicker">{t('A calmer kitchen starts here')}</span><h1>{t('Good food.')}<br /><em>{t('Less waste.')}</em><br />{t('One simple system.')}</h1><p>{t('Small daily details add up to something good.')}</p></div><div className="auth-visual-footer"><span>{t('PROUDLY BUILT FOR THE PEOPLE WHO FEED US')}</span><span>{t('CHIANG MAI · THAILAND')}</span></div></div></div>
-      <div className="auth-panel"><div className="auth-language-toggle"><LanguageToggle /></div><div className="auth-card"><span className="auth-mobile-brand"><Archive size={21} /> canteen</span><span className="auth-kicker">{t(mode === 'request' ? 'REQUEST TEAM ACCESS' : 'WELCOME BACK')}</span><h2>{mode === 'request' ? <>{t('Create a staff')}<br />{t('account request')}</> : <>{t('Sign in to your')}<br />{t('kitchen workspace')}</>}</h2><p className="auth-description">{t(mode === 'request' ? 'A Website Admin must approve and assign your role before you can use the workspace.' : 'Your team’s daily operations, all in one place.')}</p>
+      <div className="auth-panel"><div className="auth-language-toggle"><LanguageToggle /></div><div className="auth-card"><span className="auth-kicker">{t(mode === 'request' ? 'REQUEST TEAM ACCESS' : 'WELCOME BACK')}</span><h2>{mode === 'request' ? <>{t('Create a staff')}<br />{t('account request')}</> : <>{t('Sign in to your')}<br />{t('kitchen workspace')}</>}</h2><p className="auth-description">{t(mode === 'request' ? 'A Website Admin must approve and assign your role before you can use the workspace.' : 'Your team’s daily operations, all in one place.')}</p>
         {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
         <form className="auth-form" onSubmit={handleSubmit}>
           {mode === 'request' && <label>{t('Your name')}<input autoComplete="name" maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>}
@@ -79,7 +78,7 @@ export function LoginPage() {
         </form>
         <button type="button" className="auth-mode-switch" onClick={() => { setMode(mode === 'request' ? 'sign-in' : 'request'); setError(''); setSuccess(''); }}>{t(mode === 'request' ? 'Already have an account? Sign in' : 'Need an account? Request staff access')}</button>
         <p className="auth-footnote">{t('Your account is managed by your canteen administrator.')}</p>
-      </div><div className="auth-panel-footer">{t('SECURE STAFF ACCESS')} <span /> {t('GOOD FOOD. LESS WASTE.')}</div></div>
+      </div></div>
     </div>
   );
 }

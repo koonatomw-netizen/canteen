@@ -9,6 +9,7 @@ import { ClosingPage } from './features/closing/ClosingPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ExpensesPage } from './features/expenses/ExpensesPage';
 import { ManagePage } from './features/manage/ManagePage';
+import { MenuItemsPage } from './features/menus/MenuItemsPage';
 import { ProductionPage } from './features/production/ProductionPage';
 import { ReportsPage } from './features/reports/ReportsPage';
 import { StockPage } from './features/stock/StockPage';
@@ -26,6 +27,22 @@ function RoleGate({ children }: { children: ReactNode }) {
   return <Navigate to={homePathForRole(member?.role ?? 'front')} replace state={{ from: location.pathname }} />;
 }
 
+function FrontWorkflowRedirect({ tab, section, children }: { tab: 'production' | 'stock' | 'closing'; section?: 'stock' | 'waste'; children: ReactNode }) {
+  const { member } = useAuth();
+  const location = useLocation();
+  if (member?.role !== 'front') return children;
+  const params = new URLSearchParams(location.search);
+  params.set('tab', tab);
+  if (section) params.set('section', section);
+  else params.delete('section');
+  return <Navigate to={`/?${params.toString()}`} replace />;
+}
+
+function ReportsRoute() {
+  const { member } = useAuth();
+  return member?.role === 'manager' ? <Navigate to="/" replace /> : <ReportsPage />;
+}
+
 function SupabaseSetup() {
   const { t } = useI18n();
   return <main className="setup-screen"><section className="panel setup-card"><div className="setup-language-toggle"><LanguageToggle /></div><span className="brand-mark"><span>+</span></span><span className="eyebrow">{t('ONE LAST THING')}</span><h1>{t('Connect your kitchen.')}</h1><p>{t('This app needs a Supabase project to securely store staff accounts, daily records, and optional receipt photos.')}</p><ol><li>{t('Copy')} <code>.env.example</code> {t('to')} <code>.env.local</code>.</li><li>{t('Fill in your Supabase Project URL and publishable key.')}</li><li>{t('Apply the database migrations, then restart')} <code>npm run dev</code>.</li></ol><p className="setup-small">{t('The app uses a browser publishable key with database row-level security. Never paste a service role key here.')}</p></section></main>;
@@ -38,15 +55,16 @@ function AuthenticatedRoutes() {
   if (loading || (session && memberLoading)) return <main className="auth-loading"><LoadingState /></main>;
   if (!session) return <LoginPage />;
   if (memberError || !member?.active) return <main className="access-screen"><section className="panel access-card"><div className="setup-language-toggle"><LanguageToggle /></div><span className="eyebrow">{t('STAFF ACCESS')}</span><h1>{t('Your sign-in needs a team invitation.')}</h1><p>{t(memberError ? 'The team membership could not be checked. Check the connection and try signing in again.' : 'This account has not been added to your canteen yet. Ask the canteen administrator to add you to the staff list.')}</p>{memberError && <Notice>{memberError}</Notice>}<button className="button button-quiet" onClick={() => void signOut()}>{t('Sign out')}</button></section></main>;
-  const Home = member.role === 'front' || member.role === 'kitchen' ? TodayPage : DashboardPage;
+  const Home = member.role === 'front' || member.role === 'kitchen' ? TodayPage : member.role === 'manager' ? ReportsPage : DashboardPage;
   return <Routes><Route element={<AppShell />}>
     <Route index element={<Home />} />
-    <Route path="production" element={<RoleGate><ProductionPage /></RoleGate>} />
-    <Route path="stock" element={<RoleGate><StockPage /></RoleGate>} />
-    <Route path="waste" element={<RoleGate><WastePage /></RoleGate>} />
-    <Route path="closing" element={<RoleGate><ClosingPage /></RoleGate>} />
+    <Route path="production" element={<RoleGate><FrontWorkflowRedirect tab="production"><ProductionPage /></FrontWorkflowRedirect></RoleGate>} />
+    <Route path="menus" element={<RoleGate><MenuItemsPage /></RoleGate>} />
+    <Route path="stock" element={<RoleGate><FrontWorkflowRedirect tab="stock" section="stock"><StockPage /></FrontWorkflowRedirect></RoleGate>} />
+    <Route path="waste" element={<RoleGate><FrontWorkflowRedirect tab="stock" section="waste"><WastePage /></FrontWorkflowRedirect></RoleGate>} />
+    <Route path="closing" element={<RoleGate><FrontWorkflowRedirect tab="closing"><ClosingPage /></FrontWorkflowRedirect></RoleGate>} />
     <Route path="expenses" element={<RoleGate><ExpensesPage /></RoleGate>} />
-    <Route path="reports" element={<RoleGate><ReportsPage /></RoleGate>} />
+    <Route path="reports" element={<RoleGate><ReportsRoute /></RoleGate>} />
     <Route path="manage" element={<RoleGate><ManagePage /></RoleGate>} />
     <Route path="activity" element={<RoleGate><ActivityPage /></RoleGate>} />
     <Route path="*" element={<Navigate to="/" replace />} />

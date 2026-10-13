@@ -91,16 +91,20 @@ Phase 1. It will be entered manually if required.
 
 # 4. Phase 1 Navigation
 
-Keep primary navigation small:
+Keep navigation focused on each team's daily work:
 
-1.  **Dashboard**
-2.  **Production**
-3.  **Stock**
-4.  **Waste**
-5.  **Daily Closing**
-6.  **Expenses**
-7.  **Reports**
-8.  **Manage**
+- **Front:** one **Today** workspace with tabs for Production, Stock & Waste,
+  and Daily Closing. Stock and waste stay in the same workspace; starting a
+  waste record from a stock batch carries that batch into the form. Front can
+  also open Expenses in read-only mode. Add Menu is available as a dialog from
+  Production.
+- **Kitchen:** Today and Expenses, with expense entry and saved receipts on the
+  same Expenses page.
+- **Manager:** one **Reports** page for the analytical overview and detailed
+  report, with one date range controlling metrics, charts, breakdowns, and
+  source records.
+- **Website Admin:** retains direct links to the individual operational pages,
+  analysis, and administration tools.
 
 Under **Manage**:
 
@@ -110,21 +114,28 @@ Under **Manage**:
 -   Activity Log
 -   Settings
 
-Daily Closing is an always-visible operational shortcut in the sidebar and
-mobile navigation. Keep administrative pages under Manage.
+Daily Closing remains one tap away from the Front Today workspace and the
+mobile quick navigation. Keep administrative pages under Manage.
 
 ## 4.1 Department Access
 
-Use four fixed application roles, enforced in both the interface and
+Use five fixed application roles, enforced in both the interface and
 Postgres row-level security:
 
 - **Front** records production, waste, after-close stock removals, and daily
   closing. Front can view current stock and expenses but cannot change
   expenses.
+- Front can also create active menu items (name, shelf life, optional notes).
+  Editing, deactivating, or removing existing menus remains Website Admin-only.
 - **Kitchen** records and edits expenses at any time, including after a daily
   close. Kitchen does not write stock or closing records.
-- **Manager** reads Dashboard and Reports only. Stock figures in a report are
-  read-only; Managers cannot change operational records or reopen a closing.
+- **Manager** reads the combined Reports page with analysis metrics and
+  detailed records only. Stock figures in a report are read-only; Managers
+  cannot change operational records or reopen a closing.
+- **Website Auditor** can inspect every workspace, report, activity log, user,
+  and configuration detail, including private operational photos. This role
+  is strictly read-only: it cannot create, update, archive, delete, or execute
+  stock, closing, expense, or configuration changes.
 - **Website Admin** manages users/roles and shared configuration, can access
   all pages, and may reopen a closing with a required reason.
 
@@ -188,6 +199,11 @@ than appearing on the analysis dashboard.
 
 Users must be able to add and manage food-box menu items without
 developer assistance.
+
+Front and Website Admin can create menus from the dedicated Menu Items page,
+linked from Production and Front's Today page. Creation is audited and does
+not create stock. Front cannot set reserved financial fields or edit, deactivate,
+or remove existing menus. Kitchen and Manager cannot create menus.
 
 Fields:
 
@@ -829,7 +845,7 @@ Exact implementation may vary, but the domain should roughly include:
 -   user_id
 -   email
 -   display_name
--   role (`front`, `kitchen`, `manager`, or `admin`)
+-   role (`front`, `kitchen`, `manager`, `auditor`, or `admin`)
 -   active
 
 New accounts remain inactive until approved by an active Website Admin.
@@ -1117,8 +1133,8 @@ Phase 1 is considered successful when a user can:
 -   Add a new menu.
 -   Add, deactivate, and restore a shared meat option.
 -   Add a new store.
--   Approve staff accounts and assign Front, Kitchen, Manager, or Website
-    Admin roles.
+-   Approve staff accounts and assign Front, Kitchen, Manager, Website Auditor
+    (read-only), or Website Admin roles.
 -   Record today's food production.
 -   Choose a meat option for each production batch.
 -   Automatically receive a suggested expiry date.
@@ -1166,7 +1182,7 @@ Out of scope:
 -   POS integration
 -   AI/OCR receipt reading
 -   Automatic revenue calculation
--   Custom per-user permission matrices beyond the four fixed roles
+-   Custom per-user permission matrices beyond the five fixed roles
 -   Supplier procurement workflow
 -   Automatic historical Google Sheet migration
 

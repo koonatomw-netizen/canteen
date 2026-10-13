@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   Archive, BarChart3, Boxes, CalendarCheck, ChevronDown, ClipboardList,
   LayoutDashboard, LogOut, Menu, ReceiptText, Settings2, ShoppingBasket,
-  Trash2, X,
+  Trash2, UtensilsCrossed, X,
 } from 'lucide-react';
 import { useAuth } from '../features/auth/AuthContext';
 import type { AppRole } from '../features/auth/AuthContext';
@@ -13,23 +13,26 @@ import { useI18n } from '../lib/i18n';
 import { LanguageToggle } from './LanguageToggle';
 
 const links: { to: string; label: string; icon: typeof Archive; roles: AppRole[]; section: 'workspace' | 'admin' }[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager'], section: 'workspace' },
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'auditor'], section: 'workspace' },
   { to: '/', label: 'Today', icon: CalendarCheck, roles: ['front', 'kitchen'], section: 'workspace' },
-  { to: '/production', label: 'Production', icon: ShoppingBasket, roles: ['admin', 'front'], section: 'workspace' },
-  { to: '/stock', label: 'Stock & expiry', icon: Boxes, roles: ['admin', 'front'], section: 'workspace' },
-  { to: '/waste', label: 'Waste', icon: Trash2, roles: ['admin', 'front'], section: 'workspace' },
-  { to: '/closing', label: 'Daily closing', icon: CalendarCheck, roles: ['admin', 'front'], section: 'workspace' },
-  { to: '/expenses', label: 'Expenses', icon: ReceiptText, roles: ['admin', 'front', 'kitchen'], section: 'workspace' },
-  { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'manager'], section: 'workspace' },
-  { to: '/manage', label: 'Manage', icon: Settings2, roles: ['admin'], section: 'admin' },
-  { to: '/activity', label: 'Activity log', icon: ClipboardList, roles: ['admin'], section: 'admin' },
+  { to: '/', label: 'Reports', icon: BarChart3, roles: ['manager'], section: 'workspace' },
+  { to: '/production', label: 'Production', icon: ShoppingBasket, roles: ['admin', 'auditor'], section: 'workspace' },
+  { to: '/menus', label: 'Menu items', icon: UtensilsCrossed, roles: ['admin', 'auditor'], section: 'workspace' },
+  { to: '/stock', label: 'Stock & expiry', icon: Boxes, roles: ['admin', 'auditor'], section: 'workspace' },
+  { to: '/waste', label: 'Waste', icon: Trash2, roles: ['admin', 'auditor'], section: 'workspace' },
+  { to: '/closing', label: 'Daily closing', icon: CalendarCheck, roles: ['admin', 'auditor'], section: 'workspace' },
+  { to: '/expenses', label: 'Expenses', icon: ReceiptText, roles: ['admin', 'front', 'kitchen', 'auditor'], section: 'workspace' },
+  { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'auditor'], section: 'workspace' },
+  { to: '/manage', label: 'Manage', icon: Settings2, roles: ['admin', 'auditor'], section: 'admin' },
+  { to: '/activity', label: 'Activity log', icon: ClipboardList, roles: ['admin', 'auditor'], section: 'admin' },
 ];
 
 const mobileLinkOrder: Record<AppRole, string[]> = {
   admin: ['/', '/stock', '/waste', '/closing', '/manage'],
-  manager: ['/', '/reports'],
-  front: ['/', '/production', '/stock', '/waste', '/closing'],
+  manager: ['/'],
+  front: ['/'],
   kitchen: ['/', '/expenses'],
+  auditor: ['/', '/stock', '/reports', '/activity'],
 };
 
 export function AppShell() {
@@ -40,7 +43,12 @@ export function AppShell() {
   const role = member?.role ?? 'front';
   const activeLabel = links.find((link) => link.to === location.pathname && link.roles.includes(role))?.label ?? 'Workspace';
   const visibleLinks = links.filter((link) => link.roles.includes(role));
-  const mobileLinks = mobileLinkOrder[role].map((path) => links.find((link) => link.to === path)).filter((link): link is (typeof links)[number] => Boolean(link));
+  const mobileLinks = role === 'front' ? [
+    { to: '/', label: 'Today', icon: CalendarCheck, tab: 'production' },
+    { to: '/?tab=stock', label: 'Stock', icon: Boxes, tab: 'stock' },
+    { to: '/?tab=closing', label: 'Close', icon: CalendarCheck, tab: 'closing' },
+  ] : mobileLinkOrder[role].map((path) => links.find((link) => link.to === path && link.roles.includes(role))).filter((link): link is (typeof links)[number] => Boolean(link));
+  const activeTab = new URLSearchParams(location.search).get('tab') ?? 'production';
 
   const navigation = (compact = false) => (
     <nav className={compact ? 'mobile-links' : 'sidebar-links'} aria-label={t('Main navigation')}>
@@ -103,7 +111,9 @@ export function AppShell() {
         {mobileLinks.map((link) => {
           const Icon = link.icon;
           const label = link.label === 'Stock & expiry' ? 'Stock' : link.to === '/closing' ? 'Close' : link.label;
-          return <NavLink key={link.to} to={link.to} end={link.to === '/'} className={({ isActive }) => `bottom-nav-item${isActive ? ' active' : ''}`}><Icon size={19} /><span>{t(label)}</span></NavLink>;
+          const tab = 'tab' in link ? link.tab : undefined;
+          const active = role === 'front' ? tab === activeTab : location.pathname === link.to;
+          return <NavLink key={link.to} to={link.to} end={link.to === '/'} className={() => `bottom-nav-item${active ? ' active' : ''}`}><Icon size={19} /><span>{t(label)}</span></NavLink>;
         })}
       </nav>
     </div>

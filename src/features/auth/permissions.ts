@@ -5,18 +5,20 @@ export const roleLabels: Record<AppRole, string> = {
   manager: 'Manager · reports',
   front: 'Front',
   kitchen: 'Kitchen',
+  auditor: 'Website Auditor · read only',
 };
 
 const routeRoles: Record<string, readonly AppRole[]> = {
-  '/': ['admin', 'manager', 'front', 'kitchen'],
-  '/production': ['admin', 'front'],
-  '/stock': ['admin', 'front'],
-  '/waste': ['admin', 'front'],
-  '/closing': ['admin', 'front'],
-  '/expenses': ['admin', 'front', 'kitchen'],
-  '/reports': ['admin', 'manager'],
-  '/manage': ['admin'],
-  '/activity': ['admin'],
+  '/': ['admin', 'manager', 'front', 'kitchen', 'auditor'],
+  '/production': ['admin', 'front', 'auditor'],
+  '/menus': ['admin', 'front', 'auditor'],
+  '/stock': ['admin', 'front', 'auditor'],
+  '/waste': ['admin', 'front', 'auditor'],
+  '/closing': ['admin', 'front', 'auditor'],
+  '/expenses': ['admin', 'front', 'kitchen', 'auditor'],
+  '/reports': ['admin', 'manager', 'auditor'],
+  '/manage': ['admin', 'auditor'],
+  '/activity': ['admin', 'auditor'],
 };
 
 export function canAccessRoute(role: AppRole, path: string): boolean {

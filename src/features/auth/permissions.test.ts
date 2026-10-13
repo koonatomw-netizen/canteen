@@ -12,10 +12,11 @@ describe('role access', () => {
 
   it('gives Front the daily workflows and read-only expense access', () => {
     expect(canAccessRoute('front', '/')).toBe(true);
-    for (const path of ['/production', '/stock', '/waste', '/closing', '/expenses']) {
+    for (const path of ['/production', '/menus', '/stock', '/waste', '/closing', '/expenses']) {
       expect(canAccessRoute('front', path)).toBe(true);
     }
     expect(canAccessRoute('front', '/reports')).toBe(false);
+    expect(canAccessRoute('front', '/manage')).toBe(false);
   });
 
   it('keeps Kitchen in expenses and reserves settings for Website Admin', () => {
@@ -23,8 +24,17 @@ describe('role access', () => {
     expect(canAccessRoute('kitchen', '/expenses')).toBe(true);
     expect(canAccessRoute('kitchen', '/waste')).toBe(false);
     expect(canAccessRoute('kitchen', '/manage')).toBe(false);
+    expect(canAccessRoute('kitchen', '/menus')).toBe(false);
+    expect(canAccessRoute('manager', '/menus')).toBe(false);
+    expect(canAccessRoute('admin', '/menus')).toBe(true);
     expect(canAccessRoute('admin', '/manage')).toBe(true);
     expect(canAccessRoute('admin', '/activity')).toBe(true);
+  });
+
+  it('gives Website Auditor read-only routes across the workspace', () => {
+    for (const path of ['/', '/production', '/menus', '/stock', '/waste', '/closing', '/expenses', '/reports', '/manage', '/activity']) {
+      expect(canAccessRoute('auditor', path)).toBe(true);
+    }
   });
 
   it('sends each role to its main workspace', () => {
@@ -32,5 +42,6 @@ describe('role access', () => {
     expect(homePathForRole('kitchen')).toBe('/');
     expect(homePathForRole('manager')).toBe('/');
     expect(homePathForRole('admin')).toBe('/');
+    expect(homePathForRole('auditor')).toBe('/');
   });
 });

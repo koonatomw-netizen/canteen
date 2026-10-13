@@ -98,7 +98,7 @@ function getDateOptions(rows: ReportRows, stock: Stock[]) {
 export function ReportsPage() {
   const { member } = useAuth();
   const { t } = useI18n();
-  const canViewActivity = member?.role === 'admin';
+  const canViewActivity = member?.role === 'admin' || member?.role === 'auditor';
   const today = businessDateNow();
   const [start, setStart] = useState(`${today.slice(0, 8)}01`);
   const [end, setEnd] = useState(today);

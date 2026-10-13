@@ -78,6 +78,7 @@ export function ExpensesPage() {
 
   async function addExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(''); setSuccess(''); setSaving(true);
+    if (!canEdit) { setSaving(false); return; }
     const db = requireSupabase();
     const { data, error: insertError } = await db.from('expenses').insert({ expense_date: date, store_id: storeId, category_id: categoryId, amount_thb: Number(amount), notes: notes.trim() || null }).select('id').single();
     if (insertError) { setError(insertError.message); setSaving(false); return; }
@@ -124,10 +125,10 @@ export function ExpensesPage() {
   }
 
   const total = expenses.filter((item) => item.expense_date === businessDateNow() && !item.deleted_at).reduce((sum, item) => sum + Number(item.amount_thb), 0);
-  const visibleExpenses = expenses.filter((item) => Boolean(item.deleted_at) === showArchived);
+  const visibleExpenses = member?.role === 'auditor' ? expenses : expenses.filter((item) => Boolean(item.deleted_at) === showArchived);
 
   return <>
-    <PageTitle eyebrow="EVERY BAHT, ACCOUNTED FOR" title="Expenses" detail={canEdit ? 'Kitchen staff can record and correct expenses at any time. Front staff can review entries and receipts.' : 'Review kitchen expenses and receipt photos. This page is read-only for Front staff.'} action={<div className="total-chip"><small>RECORDED TODAY</small><strong>{formatBaht(total)}</strong></div>} />
+    <PageTitle eyebrow="EVERY BAHT, ACCOUNTED FOR" title="Expenses" detail={canEdit ? 'Kitchen staff can record and correct expenses at any time. Front staff can review entries and receipts.' : member?.role === 'auditor' ? 'Review expenses, archived entries, and receipt photos. This account is read-only.' : 'Review kitchen expenses and receipt photos. This page is read-only for Front staff.'} action={<div className="total-chip"><small>RECORDED TODAY</small><strong>{formatBaht(total)}</strong></div>} />
     {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
     <div className="workflow-grid two-panel-grid">
       {canEdit && <section className="panel workflow-form-panel"><div className="panel-head"><div><span className="eyebrow">{t('NEW PURCHASE')}</span><h2>{t('Add an expense')}</h2></div><span className="form-panel-icon blue"><ReceiptText size={20} /></span></div>

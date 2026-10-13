@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowRight, CalendarDays, Copy, PackagePlus, Plus } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { addCalendarDays, businessDateNow } from '../../lib/dates';
 import { formatDate, formatFoodVariant, formatQuantity } from '../../lib/format';
 import { requireSupabase } from '../../lib/supabase';
@@ -9,6 +10,7 @@ import { DraftStatus } from '../../components/DraftStatus';
 import { useLocalDraft } from '../../lib/localDrafts';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../../lib/i18n';
+import { MenuItemsPage } from '../menus/MenuItemsPage';
 
 interface MenuItem { id: string; name: string; default_shelf_life_days: number; }
 interface MeatOption { id: string; name: string; }
@@ -30,13 +32,16 @@ function readPreference(key: string): ProductionPreference | null {
   return null;
 }
 
-export function ProductionPage() {
+export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
+  const [searchParams] = useSearchParams();
+  const requestedMenuId = searchParams.get('menu');
   const { member } = useAuth();
   const { t } = useI18n();
+  const canEdit = member?.role === 'admin' || member?.role === 'front';
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [meatOptions, setMeatOptions] = useState<MeatOption[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [menuId, setMenuId] = useState('');
+  const [menuId, setMenuId] = useState(requestedMenuId ?? '');
   const [meatOptionId, setMeatOptionId] = useState('');
   const [productionDate, setProductionDate] = useState(businessDateNow());
   const [quantity, setQuantity] = useState('');
@@ -46,12 +51,13 @@ export function ProductionPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showMenuDialog, setShowMenuDialog] = useState(false);
   const preferenceKey = `canteen.production-selection:${member?.user_id ?? 'local'}`;
   const draftKey = `canteen.draft.production:${member?.user_id ?? 'local'}`;
   const draftValue = { menuId, meatOptionId, productionDate, quantity, expiryDate, notes };
   const { status: draftStatus, clearDraft } = useLocalDraft<ProductionDraft>(draftKey, draftValue, (stored) => {
     if (!isProductionDraft(stored)) return;
-    setMenuId(stored.menuId); setMeatOptionId(stored.meatOptionId); setProductionDate(stored.productionDate);
+    setMenuId(requestedMenuId ?? stored.menuId); setMeatOptionId(stored.meatOptionId); setProductionDate(stored.productionDate);
     setQuantity(stored.quantity); setExpiryDate(stored.expiryDate); setNotes(stored.notes);
   }, (value) => Boolean(value.quantity.trim() || value.notes.trim()));
 
@@ -83,6 +89,7 @@ export function ProductionPage() {
 
   async function addBatch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canEdit) return;
     setError(''); setSuccess(''); setSaving(true);
     const { error: saveError } = await requireSupabase().from('production_batches').insert({
       menu_id: menuId, meat_option_id: meatOptionId, production_date: productionDate, quantity_produced: Number(quantity), expiry_date: expiryDate, notes: notes.trim() || null,
@@ -97,6 +104,7 @@ export function ProductionPage() {
   }
 
   async function copyYesterday() {
+    if (!canEdit) return;
     const yesterday = addCalendarDays(productionDate, -1);
     setError(''); setSuccess('');
     const { data, error: fetchError } = await requireSupabase().from('production_batches').select('menu_id, meat_option_id, quantity_produced').eq('production_date', yesterday).is('deleted_at', null);
@@ -112,11 +120,11 @@ export function ProductionPage() {
   }
 
   return <>
-    <PageTitle eyebrow="FRESH FROM THE KITCHEN" title="Production" detail="Record today’s prepared food. Every entry creates its own batch." />
+    {!embedded && <PageTitle eyebrow={canEdit ? 'FRESH FROM THE KITCHEN' : 'PRODUCTION HISTORY'} title="Production" detail={canEdit ? 'Record today’s prepared food. Every entry creates its own batch.' : 'Review production batches. This account cannot change records.'} action={canEdit ? <button type="button" onClick={() => setShowMenuDialog(true)} className="button button-quiet"><Plus size={17} />{t('Add a menu')}</button> : undefined} />}
     {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
     <div className="workflow-grid production-grid">
-      <section className="panel workflow-form-panel"><div className="panel-head"><div><span className="eyebrow">{t('NEW BATCH')}</span><h2>{t('What did you make?')}</h2></div><span className="form-panel-icon"><PackagePlus size={20} /></span></div>
-        {menus.length === 0 && !busy ? <EmptyState title="Add a menu first" detail="Create a menu item in Manage, then record production here." /> : meatOptions.length === 0 && !busy ? <EmptyState title="Add a meat option first" detail="Add a shared option such as beef, chicken, pork, or vegan in Manage." /> : <form className="data-form" onSubmit={addBatch}>
+      {canEdit && <section className="panel workflow-form-panel"><div className="panel-head"><div><span className="eyebrow">{t('NEW BATCH')}</span><h2>{t('What did you make?')}</h2></div><div className="production-panel-actions"><span className="form-panel-icon"><PackagePlus size={20} /></span>{embedded && <button type="button" className="button button-quiet button-small" onClick={() => setShowMenuDialog(true)}><Plus size={15} />{t('Add a menu')}</button>}</div></div>
+        {menus.length === 0 && !busy ? <EmptyState title="Add a menu first" detail="Create a menu here, then record production." /> : meatOptions.length === 0 && !busy ? <EmptyState title="Add a meat option first" detail="Add a shared option such as beef, chicken, pork, or vegan in Manage." /> : <form className="data-form" onSubmit={addBatch}>
           <div className="form-two-cols"><label>{t('Menu')}<select required value={menuId} onChange={(event) => { const next = event.target.value; setMenuId(next); rememberSelection(next, meatOptionId); }}>{menus.map((menu) => <option key={menu.id} value={menu.id}>{menu.name}</option>)}</select></label><label>{t('Meat option')}<select required value={meatOptionId} onChange={(event) => { const next = event.target.value; setMeatOptionId(next); rememberSelection(menuId, next); }}>{meatOptions.map((meat) => <option key={meat.id} value={meat.id}>{meat.name}</option>)}</select></label></div>
           <div className="form-two-cols"><label>{t('Boxes prepared')}<input required type="number" min="1" step="1" inputMode="numeric" placeholder={t('e.g. 20')} value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label><label>{t('Made on')}<span className="input-icon-wrap"><input required type="date" value={productionDate} onChange={(event) => setProductionDate(event.target.value)} /><CalendarDays size={16} /></span></label></div>
           <label>{t('Best before')}<input required type="date" min={productionDate} value={expiryDate} onChange={(event) => setExpiryDate(event.target.value)} /><small className="field-help">{t('Suggested from this menu’s shelf life. Change it if this batch needs a different date.')}</small></label>
@@ -125,11 +133,16 @@ export function ProductionPage() {
           <div className="form-buttons"><button className="button button-primary" disabled={saving || !menuId || !meatOptionId}><Plus size={17} /> {saving ? t('Saving batch…') : t('Record production')}</button><button type="button" className="button button-quiet" onClick={() => void copyYesterday()} disabled={!menus.length || !meatOptions.length}><Copy size={16} /> {t('Copy yesterday')}</button></div>
           <p className="form-footnote"><span /> {t('Quantities are checked against stock before any future deduction.')}</p>
         </form>}
-      </section>
+      </section>}
       <section className="panel production-history"><div className="panel-head"><div><span className="eyebrow">{t('YOUR DAILY RECORD')}</span><h2>{t('Recent batches')}</h2></div><span className="count-chip">{batches.length} {t('BATCHES')}</span></div>
         {busy ? <LoadingState label="Loading batches…" /> : batches.length === 0 ? <EmptyState title={t('No batches recorded yet')} detail={t('Your production history will grow with every kitchen day.')} /> : <div className="batch-table-wrap"><table className="data-table"><thead><tr><th>{t('Food & batch')}</th><th>{t('Made')}</th><th>{t('Prepared')}</th><th>{t('Best before')}</th></tr></thead><tbody>{batches.map((batch) => <tr key={batch.id}><td><strong>{formatFoodVariant(batch.menu_name_snapshot, batch.meat_options?.name)}</strong><small className="cell-subtle">{t('Batch')} · {batch.id.slice(0, 8).toUpperCase()}</small></td><td>{formatDate(batch.production_date)}</td><td><span className="quantity-cell">{formatQuantity(batch.quantity_produced)} {t('boxes')}</span></td><td>{formatDate(batch.expiry_date)}</td></tr>)}</tbody></table></div>}
       </section>
     </div>
-    <section className="workflow-tip"><span className="tip-icon"><CalendarDays size={16} /></span><span><strong>{t('Carrying stock over?')}</strong> {t('Add each day’s food as a new batch. The Stock page keeps separate expiry dates for you.')}</span><ArrowRight size={16} /></section>
+    <section className="workflow-tip"><span className="tip-icon"><CalendarDays size={16} /></span><span><strong>{t('Carrying stock over?')}</strong> {t('Remaining stock carries over automatically. Record only newly prepared food; do not re-enter leftovers.')}</span><ArrowRight size={16} /></section>
+    {canEdit && showMenuDialog && <MenuItemsPage dialog onClose={() => setShowMenuDialog(false)} onCreated={(menu) => {
+      setMenus((current) => current.some((item) => item.id === menu.id) ? current : [...current, menu].sort((a, b) => a.name.localeCompare(b.name)));
+      setMenuId(menu.id);
+      setShowMenuDialog(false);
+    }} />}
   </>;
 }
