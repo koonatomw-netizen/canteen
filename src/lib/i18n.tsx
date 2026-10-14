@@ -292,6 +292,14 @@ const thai: Record<string, string> = {
   'No production in this period': 'ไม่มีการผลิตในช่วงเวลานี้', 'No waste in this period': 'ไม่มีของเสียในช่วงเวลานี้', 'No food taken after closing in this period': 'ไม่มีอาหารที่นำออกหลังปิดวันในช่วงเวลานี้',
   'No expenses in this period': 'ไม่มีค่าใช้จ่ายในช่วงเวลานี้', 'This closing was reopened. Sales are not included in the summary.': 'ปิดวันนี้ถูกเปิดอีกครั้ง ระบบไม่รวมยอดขายในสรุป',
   'No comparison available': 'ไม่มีช่วงก่อนหน้าให้เปรียบเทียบ', 'CLOSED': 'ปิดวันแล้ว', 'REOPENED': 'เปิดวันอีกครั้ง', 'OPEN': 'ยังเปิดอยู่',
+  'Archive wrong entry': 'เก็บรายการที่บันทึกผิด', 'Archive': 'เก็บรายการ', 'Archive batch': 'เก็บ batch นี้', 'Archiving…': 'กำลังเก็บรายการ…',
+  'Use this only for a batch entered by mistake. Its': 'ใช้เฉพาะ batch ที่บันทึกผิดเท่านั้น ระบบจะนำ', 'boxes are removed from stock, and the reason is saved in the activity log.': 'กล่องออกจากสต็อก และบันทึกเหตุผลไว้ในประวัติการเปลี่ยนแปลง',
+  'Why is this batch wrong?': 'batch นี้ผิดเพราะอะไร?', 'For example: test entry, wrong menu, entered twice': 'เช่น บันทึกทดสอบ เลือกเมนูผิด บันทึกซ้ำ',
+  'Add a reason before archiving this batch.': 'ใส่เหตุผลก่อนเก็บ batch นี้', 'This cannot be undone; record the production again if needed.': 'ย้อนกลับไม่ได้ หากต้องการให้บันทึกการผลิตใหม่',
+  'Batch archived. Its boxes were removed from stock and the reason is in the activity log.': 'เก็บ batch แล้ว นำกล่องออกจากสต็อกและบันทึกเหตุผลไว้ในประวัติแล้ว',
+  'Only a Website Admin can archive a production batch.': 'เฉพาะผู้ดูแลเว็บไซต์เท่านั้นที่เก็บ batch การผลิตได้', 'Enter a reason of 3 to 500 characters.': 'ใส่เหตุผลความยาว 3 ถึง 500 ตัวอักษร',
+  'This batch has waste or after-close removals. Archive those records first.': 'batch นี้มีรายการของเสียหรือการนำออกหลังปิดวัน ให้เก็บรายการเหล่านั้นก่อน',
+  'This batch has already been sold or adjusted, so it cannot be archived as a wrong entry.': 'batch นี้ถูกขายหรือปรับยอดไปแล้ว จึงเก็บเป็นรายการบันทึกผิดไม่ได้',
 };
 
 function readLanguage(): Language {

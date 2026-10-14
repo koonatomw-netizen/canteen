@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowRight, CalendarDays, Copy, PackagePlus, Plus } from 'lucide-react';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Archive, ArrowRight, CalendarDays, Copy, PackagePlus, Plus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { addCalendarDays, businessDateNow } from '../../lib/dates';
 import { formatDate, formatFoodVariant, formatQuantity } from '../../lib/format';
@@ -40,6 +40,8 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
   const { t } = useI18n();
   const canEdit = member?.role === 'admin' || member?.role === 'front';
   const showWriteControls = canEdit || isReadOnlyDemo(member?.role);
+  const isAdmin = member?.role === 'admin';
+  const showArchiveControls = isAdmin || isReadOnlyDemo(member?.role);
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [meatOptions, setMeatOptions] = useState<MeatOption[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -55,6 +57,8 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showMenuDialog, setShowMenuDialog] = useState(false);
+  const [archiveBatchId, setArchiveBatchId] = useState<string | null>(null);
+  const [archiveReason, setArchiveReason] = useState('');
   const preferenceKey = `canteen.production-selection:${member?.user_id ?? 'local'}`;
   const draftKey = `canteen.draft.production:${member?.user_id ?? 'local'}`;
   const draftValue = { menuId, meatOptionId, productionDate, quantity, expiryDate, notes };
@@ -99,6 +103,18 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
     });
     if (saveError) setError(saveError.message);
     else { setSuccess(t('Production batch recorded.')); setQuantity(''); setNotes(''); clearDraft(); await load(); }
+    setSaving(false);
+  }
+
+  async function archiveBatch(batch: Batch) {
+    if (!isAdmin || saving) return;
+    const reason = archiveReason.trim();
+    if (reason.length < 3) { setError(t('Add a reason before archiving this batch.')); return; }
+    if (!window.confirm(`${t('Archive')} ${formatFoodVariant(batch.menu_name_snapshot, batch.meat_options?.name)} (${formatDate(batch.production_date)}, ${formatQuantity(batch.quantity_produced)} ${t('boxes')})? ${t('This cannot be undone; record the production again if needed.')}`)) return;
+    setError(''); setSuccess(''); setSaving(true);
+    const { error: archiveError } = await requireSupabase().rpc('archive_production_batch', { p_batch_id: batch.id, p_reason: reason });
+    if (archiveError) setError(t(archiveError.message));
+    else { setSuccess(t('Batch archived. Its boxes were removed from stock and the reason is in the activity log.')); setArchiveBatchId(null); setArchiveReason(''); await load(); }
     setSaving(false);
   }
 
@@ -152,7 +168,12 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
         </form>}
       </section>}
       <section className="panel production-history"><div className="panel-head"><div><span className="eyebrow">{t('YOUR DAILY RECORD')}</span><h2>{t('Recent batches')}</h2></div><span className="count-chip">{batches.length} {t('BATCHES')}</span></div>
-        {busy ? <LoadingState label="Loading batches…" /> : batches.length === 0 ? <EmptyState title={t('No batches recorded yet')} detail={t('Your production history will grow with every kitchen day.')} /> : <div className="batch-table-wrap"><table className="data-table"><thead><tr><th>{t('Food & batch')}</th><th>{t('Made')}</th><th>{t('Prepared')}</th><th>{t('Best before')}</th></tr></thead><tbody>{batches.map((batch) => <tr key={batch.id}><td><strong>{formatFoodVariant(batch.menu_name_snapshot, batch.meat_options?.name)}</strong><small className="cell-subtle">{t('Batch')} · {batch.id.slice(0, 8).toUpperCase()}</small></td><td>{formatDate(batch.production_date)}</td><td><span className="quantity-cell">{formatQuantity(batch.quantity_produced)} {t('boxes')}</span></td><td>{formatDate(batch.expiry_date)}</td></tr>)}</tbody></table></div>}
+        {busy ? <LoadingState label="Loading batches…" /> : batches.length === 0 ? <EmptyState title={t('No batches recorded yet')} detail={t('Your production history will grow with every kitchen day.')} /> : <div className="batch-table-wrap"><table className="data-table"><thead><tr><th>{t('Food & batch')}</th><th>{t('Made')}</th><th>{t('Prepared')}</th><th>{t('Best before')}</th></tr></thead><tbody>{batches.map((batch) => <Fragment key={batch.id}><tr><td><strong>{formatFoodVariant(batch.menu_name_snapshot, batch.meat_options?.name)}</strong><small className="cell-subtle">{t('Batch')} · {batch.id.slice(0, 8).toUpperCase()}</small>{showArchiveControls && archiveBatchId !== batch.id && <button type="button" className="batch-archive-link" disabled={!isAdmin || saving} onClick={() => { setArchiveBatchId(batch.id); setArchiveReason(''); setError(''); setSuccess(''); }}><Archive size={12} />{t('Archive wrong entry')}</button>}</td><td>{formatDate(batch.production_date)}</td><td><span className="quantity-cell">{formatQuantity(batch.quantity_produced)} {t('boxes')}</span></td><td>{formatDate(batch.expiry_date)}</td></tr>
+            {archiveBatchId === batch.id && <tr className="batch-archive-row"><td colSpan={4}><form className="reopen-reason-form batch-archive-form" onSubmit={(event) => { event.preventDefault(); void archiveBatch(batch); }}>
+              <p>{t('Use this only for a batch entered by mistake. Its')} {formatQuantity(batch.quantity_produced)} {t('boxes are removed from stock, and the reason is saved in the activity log.')}</p>
+              <label>{t('Why is this batch wrong?')}<textarea rows={2} required minLength={3} maxLength={500} value={archiveReason} disabled={!isAdmin || saving} placeholder={t('For example: test entry, wrong menu, entered twice')} onChange={(event) => setArchiveReason(event.target.value)} /></label>
+              <div className="reopen-reason-actions"><button type="button" className="button button-quiet" onClick={() => setArchiveBatchId(null)}>{t('Cancel')}</button><button className="button button-primary" disabled={!isAdmin || saving || archiveReason.trim().length < 3}><Archive size={15} />{saving ? t('Archiving…') : t('Archive batch')}</button></div>
+            </form></td></tr>}</Fragment>)}</tbody></table></div>}
       </section>
     </div>
     <section className="workflow-tip"><span className="tip-icon"><CalendarDays size={16} /></span><span><strong>{t('Carrying stock over?')}</strong> {t('Remaining stock carries over automatically. Record only newly prepared food; do not re-enter leftovers.')}</span><ArrowRight size={16} /></section>
