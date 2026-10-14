@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowDownToLine, BarChart3, CalendarRange, Filter, Image as ImageIcon, PackageOpen, ReceiptText, RotateCcw, Trash2, TrendingDown, UtensilsCrossed } from 'lucide-react';
+import { ArrowDownToLine, BarChart3, CalendarRange, Filter, Image as ImageIcon, PackageOpen, ReceiptText, RotateCcw, Ticket, Trash2, TrendingDown, UtensilsCrossed } from 'lucide-react';
 import { EmptyState, LoadingState, Notice } from '../../components/Feedback';
 import { PageTitle } from '../../components/PageTitle';
 import { addCalendarDays, businessDateNow } from '../../lib/dates';
@@ -11,6 +11,7 @@ import { aggregateVariantSummary, matchesFoodFilters, previousDateRange, wasteRa
 import { requireSupabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../../lib/i18n';
+import { ColivingPage } from '../coliving/ColivingPage';
 
 interface Batch { menu_name_snapshot: string; production_date: string; meat_options: { name: string } | null; }
 interface Production { id: string; menu_name_snapshot: string; production_date: string; quantity_produced: number; expiry_date: string; meat_options: { name: string } | null; }
@@ -96,7 +97,7 @@ function getDateOptions(rows: ReportRows, stock: Stock[], stockOuts: StockOut[] 
   return { menus: [...menus].sort((a, b) => a.localeCompare(b)), meats: [...meats].sort((a, b) => a.localeCompare(b)) };
 }
 
-export function ReportsPage() {
+function CanteenReportsContent() {
   const { member } = useAuth();
   const { t } = useI18n();
   const canViewActivity = member?.role === 'admin' || member?.role === 'auditor';
@@ -368,5 +369,20 @@ export function ReportsPage() {
     </div>
 
     <section className="panel exports-panel"><div className="panel-head"><div><span className="eyebrow">{t('YOUR RECORDS, YOURS TO KEEP')}</span><h2>{t('Download a CSV')}</h2></div><ArrowDownToLine className="panel-sparkle" size={18} /></div><div className="export-grid">{visibleExports.map(({ label, icon: Icon, rows }) => <button key={label} className="export-card" disabled={!rows.length || busy} onClick={() => downloadCsv(`canteen-${label.toLowerCase()}-${start}-to-${end}.csv`, rows)}><span className="export-card-icon"><Icon size={18} /></span><span><strong>{t(label)}</strong><small>{rows.length} {t('rows available')}</small></span><ArrowDownToLine size={16} /></button>)}</div></section>
+  </>;
+}
+
+export function ReportsPage() {
+  const { member } = useAuth();
+  const { t } = useI18n();
+  const [section, setSection] = useState<'canteen' | 'coliving'>('canteen');
+  const canViewColiving = member?.role === 'admin' || member?.role === 'manager';
+  if (!canViewColiving) return <CanteenReportsContent />;
+  return <>
+    <nav className="report-domain-tabs" aria-label={t('Report areas')}>
+      <button type="button" className={section === 'canteen' ? 'active' : ''} aria-current={section === 'canteen' ? 'page' : undefined} onClick={() => setSection('canteen')}><BarChart3 size={16} />{t('Canteen operations')}</button>
+      <button type="button" className={section === 'coliving' ? 'active' : ''} aria-current={section === 'coliving' ? 'page' : undefined} onClick={() => setSection('coliving')}><Ticket size={16} />{t('Co-living')}</button>
+    </nav>
+    {section === 'canteen' ? <CanteenReportsContent /> : <ColivingPage view="report" />}
   </>;
 }

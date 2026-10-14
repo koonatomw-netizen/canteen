@@ -32,7 +32,7 @@ const listTables: Record<Exclude<Tab, 'users' | 'settings'>, string> = {
   'waste-reasons': 'waste_reasons', 'stock-out-reasons': 'stock_out_reasons',
 };
 
-const roleOptions: AppRole[] = ['front', 'kitchen', 'manager', 'auditor', 'admin'];
+  const roleOptions: AppRole[] = ['front', 'kitchen', 'coliving', 'manager', 'auditor', 'admin'];
 
 export function ManagePage() {
   const { t } = useI18n();

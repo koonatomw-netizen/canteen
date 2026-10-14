@@ -67,7 +67,7 @@ export function LoginPage() {
 
   return (
     <div className="auth-screen">
-      <div className="auth-panel"><div className="auth-language-toggle"><LanguageToggle /></div><div className="auth-card"><span className="auth-kicker">{t(mode === 'request' ? 'REQUEST TEAM ACCESS' : 'WELCOME BACK')}</span><h2>{mode === 'request' ? <>{t('Create a staff')}<br />{t('account request')}</> : <>{t('Sign in to your')}<br />{t('kitchen workspace')}</>}</h2><p className="auth-description">{t(mode === 'request' ? 'A Website Admin must approve and assign your role before you can use the workspace.' : 'Your team’s daily operations, all in one place.')}</p>
+        <div className="auth-panel"><div className="auth-language-toggle"><LanguageToggle /></div><div className="auth-card"><span className="auth-kicker">{t(mode === 'request' ? 'REQUEST TEAM ACCESS' : 'WELCOME BACK')}</span><h2>{mode === 'request' ? <>{t('Create a staff')}<br />{t('account request')}</> : <>{t('Sign in to your')}<br />{t('team workspace')}</>}</h2><p className="auth-description">{t(mode === 'request' ? 'A Website Admin must approve and assign your role before you can use the workspace.' : 'Your team’s daily operations, all in one place.')}</p>
         {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
         <form className="auth-form" onSubmit={handleSubmit}>
           {mode === 'request' && <label>{t('Your name')}<input autoComplete="name" maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>}
@@ -77,7 +77,7 @@ export function LoginPage() {
           <button className="button button-primary auth-submit" disabled={busy}>{busy ? t(mode === 'request' ? 'Creating request…' : 'Signing you in…') : t(mode === 'request' ? 'Request access' : 'Sign in')}<span><LockKeyhole size={16} /></span></button>
         </form>
         <button type="button" className="auth-mode-switch" onClick={() => { setMode(mode === 'request' ? 'sign-in' : 'request'); setError(''); setSuccess(''); }}>{t(mode === 'request' ? 'Already have an account? Sign in' : 'Need an account? Request staff access')}</button>
-        <p className="auth-footnote">{t('Your account is managed by your canteen administrator.')}</p>
+        <p className="auth-footnote">{t('Your account is managed by your team administrator.')}</p>
       </div></div>
     </div>
   );

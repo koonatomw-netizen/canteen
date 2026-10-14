@@ -6,6 +6,7 @@ export const roleLabels: Record<AppRole, string> = {
   front: 'Front',
   kitchen: 'Kitchen',
   auditor: 'Website Auditor · read only',
+  coliving: 'Co-living',
 };
 
 const routeRoles: Record<string, readonly AppRole[]> = {
@@ -19,6 +20,8 @@ const routeRoles: Record<string, readonly AppRole[]> = {
   '/reports': ['admin', 'manager', 'auditor'],
   '/manage': ['admin', 'auditor'],
   '/activity': ['admin', 'auditor'],
+  '/coliving': ['admin', 'coliving'],
+  '/coliving/records': ['admin', 'coliving'],
 };
 
 export function canAccessRoute(role: AppRole, path: string): boolean {
@@ -35,5 +38,6 @@ export function canViewAdminWorkflow(role: AppRole | null | undefined): boolean 
 
 export function homePathForRole(role: AppRole): string {
   if (role === 'kitchen') return '/expenses';
+  if (role === 'coliving') return '/coliving';
   return '/';
 }

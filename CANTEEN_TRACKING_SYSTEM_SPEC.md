@@ -102,7 +102,12 @@ Keep navigation focused on each team's daily work:
   expense records, historical amounts, receipt photos, or expense audit events.
 - **Manager:** one **Reports** page for the analytical overview and detailed
   report, with one date range controlling metrics, charts, breakdowns, and
-  source records.
+  source records. Reports contain clearly separated Canteen Operations and
+  Co-living sections; the Manager can read the Co-living dashboard, source
+  records, and change history without editing them.
+- **Co-living:** a separate workspace with a summary Dashboard and a Records
+  page for individual issues and their audit history. It records only issues
+  entered into this website and never changes canteen stock.
 - **Website Admin:** retains direct links to the individual operational pages,
   analysis, and administration tools.
 
@@ -119,7 +124,7 @@ mobile quick navigation. Keep administrative pages under Manage.
 
 ## 4.1 Department Access
 
-Use five fixed application roles, enforced in both the interface and
+Use six fixed application roles, enforced in both the interface and
 Postgres row-level security:
 
 - **Front** records production, waste, after-close stock removals, and daily
@@ -131,8 +136,18 @@ Postgres row-level security:
   totals, receipts, or expense audit events, and cannot correct or archive an
   expense after submission. Kitchen does not write stock or closing records.
 - **Manager** reads the combined Reports page with analysis metrics and
-  detailed records only. Stock figures in a report are read-only; Managers
-  cannot change operational records or reopen a closing.
+  detailed records only. Canteen Operations and Co-living reports are separate
+  sections with one date range per section. Stock figures in a report are
+  read-only; Managers cannot change operational records or reopen a closing.
+- **Co-living** records Meal Voucher issues and Gym Pass issues in its own
+  workspace. It can correct or cancel a saved issue only with a required
+  reason; every change preserves before/after values, actor, and time.
+  Co-living users cannot open Front, Kitchen, stock, waste, or canteen closing
+  workflows.
+- **Co-living, Manager, and Website Admin** can read Co-living dashboards,
+  source records, and audit history. Manager is read-only; Website Admin may
+  inspect and manage records. Front, Kitchen, and Website Auditor cannot read
+  Co-living records or their amounts.
 - **Website Auditor** can inspect operational workspaces, reports, activity
   log, users, and configuration details, including private waste photos. This
   role is strictly read-only: it cannot create, update, archive, delete, or
@@ -144,6 +159,32 @@ Postgres row-level security:
 
 New Auth accounts are inactive until a Website Admin assigns a role and
 activates them. Migrate existing `staff` accounts to Front.
+
+## 4.2 Co-living Issue Tracking
+
+- Track meal voucher issue quantity, Green/Orange color, Guest Type, paid or
+  complimentary status, actual amount entered for that issue, optional
+  recipient, and notes. If the recipient is unknown, save the count and add
+  the recipient later.
+- Guest Types are Coliving, Residency, Longevity, Outside Customer, 4Seas
+  Community Member, Event, and Free Residency Project. Suggest Green for
+  Outside Customer and Orange for the other Guest Types; allow Co-living to
+  override the suggestion.
+- Green presets are 1/180 THB, 5/850 THB, 15/2,250 THB, and 30/3,960 THB.
+  Orange defaults to 110 THB per voucher. The actual amount remains editable.
+  Complimentary voucher issues record 0 THB and require a reason.
+- Track Gym Pass issues as Day or Monthly with Guest Type, quantity, actual
+  amount, and optional recipient. Monthly issues require a start and end date;
+  default the end date to one calendar month after the start and allow edits.
+- Do not track voucher redemption, remaining balances, voucher expiry, or the
+  monthly-pack renewal bonus. Gym Pass payment status is not a separate field
+  until its owner decides the workflow.
+- Co-living dashboard totals count only saved, non-cancelled website records.
+  Do not import historical Google Sheet rows. Keep voucher and gym totals
+  separate from food production, waste, expenses, or stock.
+- Corrections and cancellations require a reason, retain before/after values,
+  and identify the actor and time. Cancellations are soft and remain visible
+  in source history.
 
 ------------------------------------------------------------------------
 
@@ -791,6 +832,16 @@ CSV datasets. Include after-close stock removals separately from waste.
 
 Keep charts simple and readable.
 
+### 16.1 Co-living Reports
+
+Give Co-living its own dashboard section, separate from Canteen Operations.
+Show meal voucher issue totals by Green/Orange color and Guest Type, actual
+amount entered, Gym Pass issue totals by Day/Monthly and Guest Type, and actual
+amount entered. Provide the source issues and their full edit/cancellation
+history in the website so a reviewer does not need to download a spreadsheet.
+Only Co-living, Manager, and Website Admin can read this section. Manager is
+read-only; only Co-living and Website Admin can create, edit, or cancel issues.
+
 ------------------------------------------------------------------------
 
 # 17. Export
@@ -1197,7 +1248,9 @@ Out of scope:
 -   POS integration
 -   AI/OCR receipt reading
 -   Automatic revenue calculation
--   Custom per-user permission matrices beyond the five fixed roles
+-   Custom per-user permission matrices beyond the six fixed roles
+-   Full accounting or automatic revenue calculation; actual amounts on
+    voucher and Gym Pass issues are retained only as entered issue details
 -   Supplier procurement workflow
 -   Automatic historical Google Sheet migration
 

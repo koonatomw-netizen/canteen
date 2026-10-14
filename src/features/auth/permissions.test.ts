@@ -11,6 +11,20 @@ describe('role access', () => {
     expect(canAccessRoute('manager', '/manage')).toBe(false);
   });
 
+  it('keeps Co-living scoped to its own tracker while managers inspect it through Reports', () => {
+    expect(canAccessRoute('coliving', '/coliving')).toBe(true);
+    expect(canAccessRoute('coliving', '/coliving/records')).toBe(true);
+    expect(canAccessRoute('coliving', '/')).toBe(false);
+    expect(canAccessRoute('coliving', '/reports')).toBe(false);
+    expect(canAccessRoute('coliving', '/stock')).toBe(false);
+    expect(canAccessRoute('manager', '/coliving')).toBe(false);
+    expect(canAccessRoute('manager', '/coliving/records')).toBe(false);
+    expect(canAccessRoute('manager', '/reports')).toBe(true);
+    expect(canAccessRoute('admin', '/coliving')).toBe(true);
+    expect(canAccessRoute('admin', '/coliving/records')).toBe(true);
+    expect(canAccessRoute('auditor', '/coliving')).toBe(false);
+  });
+
   it('gives Front the daily workflows without expense access', () => {
     expect(canAccessRoute('front', '/')).toBe(true);
     for (const path of ['/production', '/menus', '/stock', '/waste', '/closing']) {
@@ -52,5 +66,6 @@ describe('role access', () => {
     expect(homePathForRole('manager')).toBe('/');
     expect(homePathForRole('admin')).toBe('/');
     expect(homePathForRole('auditor')).toBe('/');
+    expect(homePathForRole('coliving')).toBe('/coliving');
   });
 });

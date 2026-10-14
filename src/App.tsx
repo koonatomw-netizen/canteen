@@ -15,6 +15,7 @@ import { ReportsPage } from './features/reports/ReportsPage';
 import { StockPage } from './features/stock/StockPage';
 import { WastePage } from './features/waste/WastePage';
 import { TodayPage } from './features/home/TodayPage';
+import { ColivingPage } from './features/coliving/ColivingPage';
 import { I18nProvider } from './lib/i18n';
 import { canAccessRoute, homePathForRole } from './features/auth/permissions';
 import { useI18n } from './lib/i18n';
@@ -45,7 +46,7 @@ function ReportsRoute() {
 
 function SupabaseSetup() {
   const { t } = useI18n();
-  return <main className="setup-screen"><section className="panel setup-card"><div className="setup-language-toggle"><LanguageToggle /></div><span className="brand-mark"><span>+</span></span><span className="eyebrow">{t('ONE LAST THING')}</span><h1>{t('Connect your kitchen.')}</h1><p>{t('This app needs a Supabase project to securely store staff accounts, daily records, and optional receipt photos.')}</p><ol><li>{t('Copy')} <code>.env.example</code> {t('to')} <code>.env.local</code>.</li><li>{t('Fill in your Supabase Project URL and publishable key.')}</li><li>{t('Apply the database migrations, then restart')} <code>npm run dev</code>.</li></ol><p className="setup-small">{t('The app uses a browser publishable key with database row-level security. Never paste a service role key here.')}</p></section></main>;
+  return <main className="setup-screen"><section className="panel setup-card"><div className="setup-language-toggle"><LanguageToggle /></div><span className="brand-mark"><span>+</span></span><span className="eyebrow">{t('ONE LAST THING')}</span><h1>{t('Connect your workspace.')}</h1><p>{t('This app needs a Supabase project to securely store staff accounts, daily records, and optional receipt photos.')}</p><ol><li>{t('Copy')} <code>.env.example</code> {t('to')} <code>.env.local</code>.</li><li>{t('Fill in your Supabase Project URL and publishable key.')}</li><li>{t('Apply the database migrations, then restart')} <code>npm run dev</code>.</li></ol><p className="setup-small">{t('The app uses a browser publishable key with database row-level security. Never paste a service role key here.')}</p></section></main>;
 }
 
 function AuthenticatedRoutes() {
@@ -54,10 +55,10 @@ function AuthenticatedRoutes() {
   if (!configured) return <SupabaseSetup />;
   if (loading || (session && memberLoading)) return <main className="auth-loading"><LoadingState /></main>;
   if (!session) return <LoginPage />;
-  if (memberError || !member?.active) return <main className="access-screen"><section className="panel access-card"><div className="setup-language-toggle"><LanguageToggle /></div><span className="eyebrow">{t('STAFF ACCESS')}</span><h1>{t('Your sign-in needs a team invitation.')}</h1><p>{t(memberError ? 'The team membership could not be checked. Check the connection and try signing in again.' : 'This account has not been added to your canteen yet. Ask the canteen administrator to add you to the staff list.')}</p>{memberError && <Notice>{memberError}</Notice>}<button className="button button-quiet" onClick={() => void signOut()}>{t('Sign out')}</button></section></main>;
+  if (memberError || !member?.active) return <main className="access-screen"><section className="panel access-card"><div className="setup-language-toggle"><LanguageToggle /></div><span className="eyebrow">{t('STAFF ACCESS')}</span><h1>{t('Your sign-in needs a team invitation.')}</h1><p>{t(memberError ? 'The team membership could not be checked. Check the connection and try signing in again.' : 'This account has not been added to your workspace yet. Ask your Website Admin to add you to the staff list.')}</p>{memberError && <Notice>{memberError}</Notice>}<button className="button button-quiet" onClick={() => void signOut()}>{t('Sign out')}</button></section></main>;
   const Home = member.role === 'front' ? TodayPage : member.role === 'manager' ? ReportsPage : DashboardPage;
   return <Routes><Route element={<AppShell />}>
-    <Route index element={member.role === 'kitchen' ? <Navigate to="/expenses" replace /> : <Home />} />
+    <Route index element={member.role === 'kitchen' ? <Navigate to="/expenses" replace /> : member.role === 'coliving' ? <Navigate to="/coliving" replace /> : <Home />} />
     <Route path="production" element={<RoleGate><FrontWorkflowRedirect tab="production"><ProductionPage /></FrontWorkflowRedirect></RoleGate>} />
     <Route path="menus" element={<RoleGate><MenuItemsPage /></RoleGate>} />
     <Route path="stock" element={<RoleGate><FrontWorkflowRedirect tab="stock" section="stock"><StockPage /></FrontWorkflowRedirect></RoleGate>} />
@@ -67,6 +68,8 @@ function AuthenticatedRoutes() {
     <Route path="reports" element={<RoleGate><ReportsRoute /></RoleGate>} />
     <Route path="manage" element={<RoleGate><ManagePage /></RoleGate>} />
     <Route path="activity" element={<RoleGate><ActivityPage /></RoleGate>} />
+    <Route path="coliving" element={<RoleGate><ColivingPage view="dashboard" /></RoleGate>} />
+    <Route path="coliving/records" element={<RoleGate><ColivingPage view="records" /></RoleGate>} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Route></Routes>;
 }

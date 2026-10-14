@@ -33,17 +33,26 @@ a { color: inherit; text-decoration: none; }
 .brand-mark { height: 34px; width: 34px; flex: 0 0 auto; border-radius: 11px; display: grid; place-items: center; background: #6ba385; color: white; }
 .brand-name { color: white; font-family: Manrope, sans-serif; font-size: 19px; font-weight: 800; letter-spacing: -.8px; line-height: 1.15; }
 .brand-name span { display: block; margin-top: 3px; color: #afc4b8; font: 500 9px 'DM Sans', sans-serif; letter-spacing: 1.2px; text-transform: uppercase; }
-.canteen-switcher { display: flex; align-items: center; gap: 11px; min-height: 57px; margin: 34px 0 21px; padding: 9px 10px; background: rgb(255 255 255 / 7%); border: 1px solid rgb(255 255 255 / 8%); border-radius: 12px; color: #a9c4b5; }
-.canteen-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: #d5e6d9; color: #34644d; font-family: Manrope, sans-serif; font-weight: 800; }
-.canteen-name { flex: 1; color: #f6f8f5; font-size: 12px; font-weight: 700; }
-.canteen-name small { display: block; padding-top: 3px; color: #9fb7a8; font-size: 10px; font-weight: 400; }
-.sidebar-links { display: flex; flex-direction: column; gap: 4px; }
+.workspace-context { display: flex; align-items: center; gap: 11px; min-height: 57px; margin: 34px 0 21px; padding: 9px 10px; background: rgb(255 255 255 / 7%); border: 1px solid rgb(255 255 255 / 8%); border-radius: 12px; color: #a9c4b5; }
+.workspace-avatar { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 auto; border-radius: 9px; background: #d5e6d9; color: #34644d; font-family: Manrope, sans-serif; font-weight: 800; }
+.workspace-context-copy { flex: 1; min-width: 0; color: #f6f8f5; font-size: 12px; font-weight: 700; }
+.workspace-context-copy small { display: block; padding-top: 3px; color: #9fb7a8; font-size: 10px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-links { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 13px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.nav-group { display: grid; gap: 3px; }
+.nav-group-links { display: grid; gap: 4px; }
+.nav-group-links[hidden] { display: none; }
+.nav-group.collapsible .nav-group-links { margin-left: 8px; padding-left: 4px; border-left: 1px solid rgb(255 255 255 / 12%); }
+.nav-group-toggle { width: 100%; min-height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; color: #83a293; font-size: 9px; font-weight: 700; letter-spacing: 1.05px; text-align: left; text-transform: uppercase; transition: color .15s, background .15s; }
+.nav-group-toggle:hover, .nav-group-toggle:focus-visible { color: #d9e9dc; background: rgb(255 255 255 / 6%); outline: none; }
+.nav-group-toggle svg { flex: 0 0 auto; transform: rotate(-90deg); transition: transform .16s ease; }
+.nav-group-toggle[aria-expanded='true'] svg { transform: rotate(0); }
+.nav-group[data-active='true'] .nav-group-toggle { color: #b4d2bd; }
 .nav-link { position: relative; display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 12px; border-radius: 9px; color: #bed0c4; font-size: 12.5px; font-weight: 500; transition: background .15s, color .15s; }
 .nav-link:hover { color: #fff; background: rgb(255 255 255 / 7%); }
 .nav-link.active { color: #fff; background: #39634e; box-shadow: inset 3px 0 #a6cdad; font-weight: 700; }
 .nav-link.active svg { color: #c4e0c5; }
 .nav-link-dot { position: absolute; right: 12px; width: 6px; height: 6px; border-radius: 50%; background: #f4b58a; }
-.sidebar-caption { margin: 19px 12px 7px; color: #83a293; font-size: 9px; font-weight: 700; letter-spacing: 1.15px; }
+.sidebar-caption { margin: 7px 12px 4px; color: #83a293; font-size: 9px; font-weight: 700; letter-spacing: 1.15px; }
 .sidebar-bottom { margin-top: auto; }
 .staff-card { display: flex; align-items: center; gap: 10px; padding: 12px 5px 11px; border-top: 1px solid rgb(255 255 255 / 11%); }
 .staff-avatar, .topbar-avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #e2cdaa; color: #674c2d; font-size: 12px; font-weight: 700; }
@@ -307,7 +316,14 @@ a { color: inherit; text-decoration: none; }
 
 @media (min-width: 1500px) { .page-content { padding-right: 54px; padding-left: 54px; }.topbar { padding-right: 54px; padding-left: 54px; } }
 @media (max-width: 1120px) { .sidebar { width: 216px; padding-right: 14px; padding-left: 14px; }.main-area { width: calc(100% - 216px); margin-left: 216px; }.page-content { padding-right: 25px; padding-left: 25px; }.topbar { padding: 0 25px; }.dashboard-columns { grid-template-columns: minmax(0, 1fr); }.attention-panel { order: -1; }.metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.workflow-grid { grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); }.report-grid { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 820px) { .sidebar { display: none; }.main-area { width: 100%; margin-left: 0; padding-bottom: 70px; }.topbar { height: 61px; padding: 0 17px; }.mobile-menu-button { display: inline-grid; border: 1px solid #edf0eb; background: white; }.topbar-left { gap: 9px; }.topbar-left > div { gap: 3px; }.topbar-right { gap: 9px; }.topbar-user { display: none; }.topbar-divider { display: none; }.page-content { padding: 25px 17px 30px; }.page-title-row { align-items: flex-start; margin-bottom: 20px; }.page-title-row h1 { font-size: 25px; }.page-title-row p { max-width: 500px; font-size: 10px; }.page-title-action .button { min-height: 36px; padding: 0 10px; font-size: 9px; }.quick-actions { grid-template-columns: 1fr; gap: 7px; margin-bottom: 24px; }.quick-action { min-height: 63px; padding: 10px; }.quick-icon { width: 34px; height: 34px; }.quick-action small { font-size: 8px; }.section-heading h2 { font-size: 14px; }.metric-card { min-height: 103px; padding: 13px; }.metric-value { font-size: 22px; }.stock-list-row { gap: 8px; }.status-badge { font-size: 7px; }.dashboard-columns { gap: 10px; }.panel-head h2 { font-size: 14px; }.activity-row { grid-template-columns: 12px minmax(0, 1fr) auto; }.activity-type { display: none; }.dashboard-bottomline { flex-direction: column; gap: 5px; }.workflow-grid, .two-panel-grid { grid-template-columns: 1fr; }.workflow-grid > .panel:nth-child(2) { padding: 17px; }.workflow-form-panel { padding: 17px; }.production-grid { gap: 11px; }.closing-layout { grid-template-columns: 1fr; }.closing-summary { display: grid; grid-template-columns: 1fr 1fr; }.close-totals { grid-column: 1 / -1; }.stock-summary-row { grid-template-columns: 1fr; gap: 7px; }.stock-summary-card { min-height: 61px; }.summary-note { margin-left: auto; }.stock-tools { align-items: flex-start; flex-direction: column; }.stock-search { width: 100%; }.report-controls { flex-wrap: wrap; }.report-range-title { flex-basis: 100%; }.report-controls label { flex: 1; }.report-controls input { width: 100%; }.report-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }.report-metric { min-height: 96px; }.export-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.activity-row time { font-size: 8px; }.manage-tabs { padding: 0 9px; }.manage-tab { min-height: 45px; padding: 0 8px; font-size: 8px; }.manage-content { padding: 15px; }.inline-add-form { flex-wrap: wrap; }.inline-add-form label { min-width: calc(50% - 30px); }.inline-add-form label:nth-of-type(2) { max-width: none; }.inline-add-form .button { margin-left: 38px; }.date-pill { padding: 7px; font-size: 9px; }.mobile-bottom-nav { position: fixed; z-index: 25; inset: auto 0 0; height: 61px; display: flex; align-items: center; justify-content: space-around; padding: 5px 5px env(safe-area-inset-bottom, 0); border-top: 1px solid #e7ece6; background: rgb(255 255 255 / 96%); backdrop-filter: blur(15px); }.bottom-nav-item { display: flex; min-width: 56px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #859188; font-size: 7px; }.bottom-nav-item.active { color: #4e805e; font-weight: 700; }.bottom-nav-item svg { stroke-width: 1.9; }.mobile-overlay[data-open='true'] { position: fixed; z-index: 40; inset: 0; display: block; background: rgb(16 34 26 / 35%); }.mobile-drawer { position: fixed; z-index: 41; inset: 0 auto 0 0; width: min(82vw, 300px); display: flex; flex-direction: column; padding: 18px; background: #234438; color: white; transform: translateX(-105%); transition: transform .2s ease; }.mobile-drawer.open { transform: translateX(0); }.mobile-drawer-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 13px; border-bottom: 1px solid rgb(255 255 255 / 13%); }.mobile-links { display: flex; flex-direction: column; gap: 4px; padding-top: 14px; }.mobile-links .nav-link { min-height: 44px; }.mobile-signout { display: flex; align-items: center; gap: 8px; min-height: 42px; margin-top: auto; border: 0; color: #dce8de; background: transparent; font-size: 11px; }.mobile-drawer-head .icon-button { color: #d0dfd3; }.mobile-drawer-head .brand-name { font-size: 17px; } }
+@media (max-width: 820px) { .sidebar { display: none; }.main-area { width: 100%; margin-left: 0; padding-bottom: 70px; }.topbar { height: 61px; padding: 0 17px; }.mobile-menu-button { display: inline-grid; border: 1px solid #edf0eb; background: white; }.topbar-left { gap: 9px; }.topbar-left > div { gap: 3px; }.topbar-right { gap: 9px; }.topbar-user { display: none; }.topbar-divider { display: none; }.page-content { padding: 25px 17px 30px; }.page-title-row { align-items: flex-start; margin-bottom: 20px; }.page-title-row h1 { font-size: 25px; }.page-title-row p { max-width: 500px; font-size: 10px; }.page-title-action .button { min-height: 36px; padding: 0 10px; font-size: 9px; }.quick-actions { grid-template-columns: 1fr; gap: 7px; margin-bottom: 24px; }.quick-action { min-height: 63px; padding: 10px; }.quick-icon { width: 34px; height: 34px; }.quick-action small { font-size: 8px; }.section-heading h2 { font-size: 14px; }.metric-card { min-height: 103px; padding: 13px; }.metric-value { font-size: 22px; }.stock-list-row { gap: 8px; }.status-badge { font-size: 7px; }.dashboard-columns { gap: 10px; }.panel-head h2 { font-size: 14px; }.activity-row { grid-template-columns: 12px minmax(0, 1fr) auto; }.activity-type { display: none; }.dashboard-bottomline { flex-direction: column; gap: 5px; }.workflow-grid, .two-panel-grid { grid-template-columns: 1fr; }.workflow-grid > .panel:nth-child(2) { padding: 17px; }.workflow-form-panel { padding: 17px; }.production-grid { gap: 11px; }.closing-layout { grid-template-columns: 1fr; }.closing-summary { display: grid; grid-template-columns: 1fr 1fr; }.close-totals { grid-column: 1 / -1; }.stock-summary-row { grid-template-columns: 1fr; gap: 7px; }.stock-summary-card { min-height: 61px; }.summary-note { margin-left: auto; }.stock-tools { align-items: flex-start; flex-direction: column; }.stock-search { width: 100%; }.report-controls { flex-wrap: wrap; }.report-range-title { flex-basis: 100%; }.report-controls label { flex: 1; }.report-controls input { width: 100%; }.report-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }.report-metric { min-height: 96px; }.export-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.activity-row time { font-size: 8px; }.manage-tabs { padding: 0 9px; }.manage-tab { min-height: 45px; padding: 0 8px; font-size: 8px; }.manage-content { padding: 15px; }.inline-add-form { flex-wrap: wrap; }.inline-add-form label { min-width: calc(50% - 30px); }.inline-add-form label:nth-of-type(2) { max-width: none; }.inline-add-form .button { margin-left: 38px; }.date-pill { padding: 7px; font-size: 9px; }.mobile-bottom-nav { position: fixed; z-index: 25; inset: auto 0 0; height: 61px; display: flex; align-items: center; justify-content: space-around; padding: 5px 5px env(safe-area-inset-bottom, 0); border-top: 1px solid #e7ece6; background: rgb(255 255 255 / 96%); backdrop-filter: blur(15px); }.bottom-nav-item { display: flex; min-width: 56px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #859188; font-size: 7px; }.bottom-nav-item.active { color: #4e805e; font-weight: 700; }.bottom-nav-item svg { stroke-width: 1.9; }.mobile-overlay[data-open='true'] { position: fixed; z-index: 40; inset: 0; display: block; background: rgb(16 34 26 / 35%); }.mobile-drawer { position: fixed; z-index: 41; inset: 0 auto 0 0; width: min(82vw, 300px); display: flex; flex-direction: column; padding: 18px; background: #234438; color: white; transform: translateX(-105%); transition: transform .2s ease; }.mobile-drawer.open { transform: translateX(0); }.mobile-drawer-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 13px; border-bottom: 1px solid rgb(255 255 255 / 13%); }.mobile-links { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; gap: 13px; padding-top: 14px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }.mobile-links .nav-link { min-height: 44px; }.mobile-signout { display: flex; align-items: center; gap: 8px; min-height: 42px; margin-top: auto; border: 0; color: #dce8de; background: transparent; font-size: 11px; }.mobile-drawer-head .icon-button { color: #d0dfd3; }.mobile-drawer-head .brand-name { font-size: 17px; } }
+@media (max-width: 820px) {
+  .mobile-drawer { min-height: 0; overflow: hidden; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+  .mobile-drawer-head { flex: 0 0 auto; }
+  .mobile-links { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .mobile-signout { flex: 0 0 auto; width: 100%; min-height: 48px; margin-top: 0; padding: 12px 2px 0; border-top: 1px solid rgb(255 255 255 / 16%); }
+}
+
 @media (max-width: 560px) { .page-title-row { gap: 8px; flex-direction: column; }.page-title-action { align-self: stretch; }.page-title-action .button { width: 100%; }.page-title-action .total-chip { width: 100%; }.auth-screen { display: block; }.auth-visual { display: none; }.auth-panel { min-height: 100dvh; align-items: stretch; justify-content: center; padding: 30px 23px 54px; }.auth-card { width: 100%; margin: auto; }.auth-mobile-brand { display: flex; align-items: center; gap: 8px; margin-bottom: 46px; color: #3a654a; font-family: Manrope, sans-serif; font-size: 17px; font-weight: 800; }.auth-card h2 { font-size: 25px; }.auth-panel-footer { bottom: 17px; font-size: 6px; }.form-two-cols { flex-direction: column; }.form-buttons > .button { flex: 1; }.data-table { min-width: 470px; }.closing-date-row { align-items: flex-start; flex-direction: column; }.closing-date-row label { max-width: 100%; width: 100%; }.closing-state { margin-bottom: 0; }.closing-batch-row { gap: 8px; }.closing-batch-info { min-width: 105px; }.closing-count-label input { width: 55px; }.adjustment-inline { margin-left: 0; }.closing-summary { grid-template-columns: 1fr; }.close-totals { grid-column: auto; }.report-controls .button { flex: 1; }.activity-row { grid-template-columns: 10px minmax(0, 1fr) auto; gap: 6px; }.activity-description { font-size: 9px; }.activity-row time { font-size: 7px; }.audit-event summary { gap: 7px; }.audit-event summary time { display: none; }.settings-form { grid-template-columns: 1fr; }.settings-form .button, .settings-footnote { grid-column: auto; }.export-grid { gap: 6px; }.export-card { gap: 6px; padding: 6px; }.export-card-icon { width: 26px; height: 26px; }.export-card strong { font-size: 8px; }.summary-note { display: none; }.stock-tools .panel-head { width: 100%; }.waste-amount { font-size: 11px; } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
@@ -797,4 +813,296 @@ a { color: inherit; text-decoration: none; }
   .production-panel-actions .button { min-height: 40px; padding: 0 8px; font-size: 9px; }
   .menu-dialog-backdrop { align-items: end; padding: 0; }
   .menu-create-dialog { width: 100%; max-height: 94dvh; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; }
+}
+.coliving-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.coliving-entry-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 14px; border-radius: 9px; font-size: 10px; font-weight: 700; box-shadow: 0 1px 3px rgb(38 77 57 / 9%); transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.coliving-entry-voucher { border-color: #bdd5c1; background: #eaf3eb; color: #356d4f; }
+.coliving-entry-voucher:hover:not(:disabled) { border-color: #9fbea4; background: #dcebdd; }
+.coliving-entry-gym { border-color: #c9c0dc; background: #f0ecf7; color: #665589; }
+.coliving-entry-gym:hover:not(:disabled) { border-color: #b2a6cc; background: #e7e1f1; }
+.coliving-entry-voucher.is-active { border-color: #66ad77; background: linear-gradient(135deg, #dcf3df, #f2faf1); color: #205f35; box-shadow: 0 0 0 3px rgb(72 157 88 / 17%), 0 6px 16px rgb(55 129 68 / 18%); transform: translateY(-1px); }
+.coliving-entry-gym.is-active { border-color: #9683bf; background: linear-gradient(135deg, #e9e2f6, #f7f3fc); color: #594583; box-shadow: 0 0 0 3px rgb(132 108 180 / 19%), 0 6px 16px rgb(105 79 153 / 17%); transform: translateY(-1px); }
+.coliving-entry-button:focus-visible, .coliving-choice:focus-visible, .coliving-package-card:focus-visible, .coliving-record-filters .button:focus-visible { outline: 3px solid rgb(75 139 95 / 35%); outline-offset: 2px; }
+.report-domain-tabs { display: flex; gap: 7px; margin-bottom: 16px; overflow-x: auto; }
+.report-domain-tabs button { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 0 15px; border: 1px solid #e4ebe2; border-radius: 9px; background: white; color: #718076; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.report-domain-tabs button.active { border-color: #9bc5a3; background: #f0f7ef; color: #357454; }
+.coliving-range { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 13px; }
+.coliving-range-title { display: flex; align-items: center; gap: 10px; flex: 1; color: #5b8468; }
+.coliving-range-title > span { display: flex; flex-direction: column; gap: 3px; }
+.coliving-range-title strong { color: #465b4d; font-size: 13px; }
+.coliving-range-title small { color: #8e9a90; font-size: 10px; }
+.coliving-range label { display: flex; flex-direction: column; gap: 4px; color: #8b988e; font-size: 10px; font-weight: 700; }
+.coliving-range input { width: 145px; min-height: 36px; padding: 0 9px; border: 1px solid #e2e9e1; border-radius: 7px; background: white; color: #3f5547; font-size: 11px; }
+.coliving-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.coliving-summary-card { min-width: 0; padding: 15px; border: 1px solid #e9eee7; border-radius: 11px; background: white; }
+.coliving-summary-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.coliving-summary-title { display: flex; align-items: center; gap: 8px; color: #465d4e; font-size: 13px; font-weight: 700; }
+.coliving-summary-title svg { color: #56876a; }
+.gym-summary .coliving-summary-title svg { color: #8273a6; }
+.coliving-summary-total { display: flex; align-items: baseline; gap: 5px; color: #405647; }
+.coliving-summary-total strong { font-family: Manrope, sans-serif; font-size: 23px; letter-spacing: -.7px; }
+.coliving-summary-total small { color: #91a096; font-size: 11px; }
+.coliving-summary-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.coliving-summary-stats > div { display: flex; min-width: 0; flex-direction: column; gap: 5px; padding: 9px 10px; border-radius: 8px; background: #f7f9f6; }
+.coliving-summary-stats span { color: #849188; font-size: 10px; font-weight: 700; }
+.coliving-summary-stats strong { overflow-wrap: anywhere; color: #405647; font-family: Manrope, sans-serif; font-size: 15px; }
+.voucher-summary .coliving-summary-stats > div:first-child span { color: #309844; }
+.voucher-summary .coliving-summary-stats > div:nth-child(2) span { color: #c87b42; }
+.gym-summary .coliving-summary-stats > div:nth-child(2) span { color: #8273a6; }
+.coliving-record-status-green { color: #309844; }
+.coliving-dashboard-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 13px; margin-bottom: 14px; }
+.coliving-table-panel, .coliving-form-panel, .coliving-void-panel, .coliving-record-panel { padding: 17px; }
+.coliving-table-panel .panel-head, .coliving-record-panel .panel-head { margin-bottom: 10px; }
+.coliving-table-panel .panel-head > svg { color: #5d8c6d; }
+.coliving-dashboard-grid .report-data-table { font-size: 12px; }
+.coliving-dashboard-grid .report-data-table th, .coliving-dashboard-grid .report-data-table td { padding: 13px 14px; }
+.coliving-dashboard-grid .report-data-table thead th { font-size: 10px; }
+.coliving-dashboard-grid .report-data-table tbody th, .coliving-dashboard-grid .report-data-table tbody td { font-size: 12px; }
+.coliving-dashboard-grid .coliving-empty-state { font-size: 12px; }
+.coliving-dashboard-grid .coliving-empty-link { font-size: 12px; }
+.coliving-form-panel, .coliving-void-panel { margin-bottom: 14px; }
+.coliving-form-panel { width: 100%; }
+.coliving-form-layout { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(260px, .85fr); align-items: start; gap: 18px; }
+.coliving-form { max-width: none; }
+.coliving-entry-summary { position: sticky; top: 80px; padding: 16px; border: 1px solid #dbe7da; border-radius: 11px; background: linear-gradient(155deg, #f8fbf7, #f2f7f1); }
+.coliving-entry-summary.gym { border-color: #e1d9ed; background: linear-gradient(155deg, #fbf9fd, #f4f0f9); }
+.coliving-entry-summary-head { display: flex; align-items: center; gap: 10px; }
+.coliving-entry-summary-icon { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: 10px; background: #e6f2e7; color: #43805b; }
+.coliving-entry-summary.gym .coliving-entry-summary-icon { background: #ece6f5; color: #79659e; }
+.coliving-entry-summary-head .eyebrow { margin: 0 0 3px; }
+.coliving-entry-summary-head h3 { margin: 0; color: #3f5947; font-family: Manrope, sans-serif; font-size: 15px; }
+.coliving-entry-summary-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.coliving-entry-summary-totals > div { display: flex; min-width: 0; flex-direction: column; gap: 5px; padding: 11px; border: 1px solid rgb(224 233 221 / 80%); border-radius: 9px; background: rgb(255 255 255 / 80%); }
+.coliving-entry-summary.gym .coliving-entry-summary-totals > div { border-color: #e9e3f0; }
+.coliving-entry-summary-totals span, .coliving-entry-summary-details dt { color: #849188; font-size: 9px; font-weight: 700; }
+.coliving-entry-summary-totals strong { overflow-wrap: anywhere; color: #365c43; font-family: Manrope, sans-serif; font-size: 16px; }
+.coliving-entry-summary.gym .coliving-entry-summary-totals strong { color: #645383; }
+.coliving-entry-summary-details { display: flex; flex-direction: column; gap: 0; margin: 12px 0 0; }
+.coliving-entry-summary-details > div { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid rgb(218 229 216 / 85%); }
+.coliving-entry-summary.gym .coliving-entry-summary-details > div { border-color: #e7e0ef; }
+.coliving-entry-summary-details dt { margin: 0; }
+.coliving-entry-summary-details dd { margin: 0; color: #526558; font-size: 10px; font-weight: 700; text-align: right; }
+.coliving-entry-summary.gym .coliving-entry-summary-details dd { color: #675783; }
+.coliving-empty-state { display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 2px; color: #7f8d82; font-size: 10px; }
+.coliving-empty-link { flex: 0 0 auto; color: #397456; font-size: 10px; font-weight: 700; text-decoration: none; }
+.coliving-empty-link:hover { text-decoration: underline; }
+.coliving-field { display: flex; flex-direction: column; gap: 7px; color: #56675b; font-size: 10px; font-weight: 700; }
+.coliving-choice-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.coliving-choice { display: inline-flex; min-width: 145px; min-height: 40px; align-items: center; justify-content: space-between; gap: 10px; padding: 0 13px; border: 1px solid #e1e8e0; border-radius: 8px; background: #fff; color: #617268; font-size: 10px; font-weight: 700; }
+.coliving-choice:hover, .coliving-choice.selected { border-color: #8db69a; box-shadow: 0 0 0 2px rgb(88 145 100 / 8%); color: #347355; }
+.coliving-choice-green.selected { color: #27823c; border-color: #7ebd89; background: #f2faf2; }
+.coliving-choice-orange.selected { color: #b86732; border-color: #e6ad7d; background: #fff8f1; }
+.coliving-choice-green.selected svg { color: #27823c; }
+.coliving-choice-orange.selected svg { color: #b86732; }
+.coliving-package-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+.coliving-package-card { display: grid; width: 100%; grid-template-columns: minmax(34px, 1fr) auto 16px; align-items: center; gap: 10px; min-height: 62px; padding: 8px 10px; border: 1px solid #e1e8e0; border-radius: 9px; background: white; color: #53665a; text-align: left; }
+.coliving-package-card:hover { border-color: #a6c8ad; background: #f8fbf7; }
+.coliving-package-card.selected { border-color: #70a77e; background: #eef7ee; box-shadow: 0 0 0 2px rgb(88 145 100 / 10%); color: #2f704e; }
+.coliving-package-quantity, .coliving-package-price { display: flex; flex-direction: column; gap: 2px; }
+.coliving-package-quantity strong { color: #405647; font-family: Manrope, sans-serif; font-size: 17px; }
+.coliving-package-price { text-align: right; }
+.coliving-package-price strong { color: #405647; font-size: 10px; white-space: nowrap; }
+.coliving-package-quantity small, .coliving-package-price small { color: #849188; font-size: 8px; }
+.coliving-package-check { color: #347755; }
+.coliving-form small { color: #87948b; font-size: 9px; font-weight: 500; }
+.coliving-record-filters { display: flex; width: fit-content; max-width: 100%; gap: 2px; padding: 3px; margin-bottom: 10px; overflow-x: auto; border: 1px solid #e5ebe3; border-radius: 10px; background: #f3f6f2; }
+.coliving-record-filters .button { min-height: 34px; border-color: transparent; background: transparent; color: #77847a; white-space: nowrap; box-shadow: none; }
+.coliving-record-filters .button.active { border-color: white; background: white; color: #315f45; box-shadow: 0 1px 3px rgb(33 58 42 / 12%); }
+.coliving-record-list { display: flex; flex-direction: column; max-height: 740px; overflow-y: auto; border-top: 1px solid #edf0eb; }
+.coliving-record { border-bottom: 1px solid #edf0eb; }
+.coliving-record summary { display: grid; grid-template-columns: 38px minmax(150px, 1fr) 58px 92px auto; align-items: center; gap: 10px; min-height: 70px; padding: 9px 6px; cursor: pointer; list-style: none; }
+.coliving-record summary::-webkit-details-marker { display: none; }
+.coliving-record-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; }
+.coliving-record-icon.voucher { background: #edf6ee; color: #49835a; }
+.coliving-record-icon.gym { background: #f1eef8; color: #8274a1; }
+.coliving-record-main { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.coliving-record-main strong { overflow: hidden; color: #45594b; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.coliving-record-main small, .coliving-record-quantity small { color: #93a096; font-size: 8px; }
+.coliving-record-quantity { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.coliving-record-quantity strong { color: #47614e; font-size: 13px; }
+.coliving-record-amount { color: #49614f; font-size: 10px; text-align: right; white-space: nowrap; }
+.coliving-status { padding: 5px 7px; border-radius: 6px; background: #f1f6f0; color: #64826d; font-size: 8px; font-weight: 700; text-align: center; white-space: nowrap; }
+.coliving-record-voided .coliving-status { background: #fbefea; color: #b56f52; }
+.coliving-record-voided summary { opacity: .72; }
+.coliving-record-details { padding: 3px 8px 14px 54px; }
+.coliving-record-info { display: flex; flex-wrap: wrap; gap: 9px 18px; padding: 10px; border-radius: 8px; background: #fafbf9; }
+.coliving-record-info span { color: #87948b; font-size: 9px; }
+.coliving-record-info strong { color: #4d6053; font-weight: 600; }
+.coliving-record-details > .coliving-actions { margin: 9px 0; }
+.coliving-history { display: flex; flex-direction: column; gap: 8px; margin-top: 11px; }
+.coliving-history > strong { color: #68786c; font-size: 9px; }
+.coliving-history article { display: flex; align-items: flex-start; gap: 8px; }
+.coliving-history-mark { flex: 0 0 auto; width: 8px; height: 8px; margin-top: 3px; border-radius: 50%; background: #7cac86; }
+.coliving-history-mark.updated { background: #789bb0; }
+.coliving-history-mark.voided { background: #c47f5d; }
+.coliving-history article > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.coliving-history article strong { color: #57695c; font-size: 9px; }
+.coliving-history article small, .coliving-history > small { overflow-wrap: anywhere; color: #929d95; font-size: 8px; line-height: 1.45; }
+.coliving-audit-note { display: flex; align-items: center; gap: 6px; margin: 10px 2px 0; color: #87968c; font-size: 9px; }
+@media (min-width: 1024px) {
+  .coliving-range-title strong { font-size: 14px; }
+  .coliving-range-title small { font-size: 11px; }
+  .coliving-range label { font-size: 11px; }
+  .coliving-range input { min-height: 38px; font-size: 12px; }
+  .coliving-summary-title { font-size: 14px; }
+  .coliving-summary-total strong { font-size: 27px; }
+  .coliving-summary-total small { font-size: 12px; }
+  .coliving-summary-stats span { font-size: 11px; }
+  .coliving-summary-stats strong { font-size: 16px; }
+  .coliving-table-panel .panel-head h2 { font-size: 18px; }
+  .coliving-dashboard-grid .report-data-table tbody th, .coliving-dashboard-grid .report-data-table tbody td { font-size: 13px; }
+  .coliving-dashboard-grid .coliving-empty-state, .coliving-dashboard-grid .coliving-empty-link { font-size: 13px; }
+
+  /* Give every role view a shared, readable desktop type scale. */
+  .page-content .eyebrow { font-size: 10px; }
+  .page-content .page-title-row { margin-bottom: 28px; }
+  .page-content .page-title-row h1 { font-size: clamp(29px, 2.6vw, 34px); }
+  .page-content .page-title-row p { font-size: 13px; }
+  .page-content .section-heading h2, .page-content .panel-head h2 { font-size: 18px; }
+  .page-content .button { font-size: 12px; }
+  .page-content .button-small { font-size: 11px; }
+  .page-content .soft-chip, .page-content .count-chip { min-height: 27px; padding-right: 9px; padding-left: 9px; font-size: 9px; }
+  .page-content .data-form > label, .page-content .form-two-cols label, .page-content .closing-date-row label,
+  .page-content .closing-note, .page-content .inline-add-form label, .page-content .settings-form label { font-size: 12px; }
+  .page-content .data-form input, .page-content .data-form select, .page-content .data-form textarea,
+  .page-content .closing-date-row input, .page-content .closing-batch-row input, .page-content .closing-batch-row select,
+  .page-content .settings-form input, .page-content .inline-add-form input, .page-content .report-controls input,
+  .page-content .report-filter-row select { min-height: 41px; font-size: 13px; }
+  .page-content .data-form textarea, .page-content .closing-form textarea { min-height: 76px; }
+  .page-content .data-form .field-help { font-size: 10px; }
+  .page-content .data-table th { font-size: 9px; }
+  .page-content .data-table td, .page-content .data-table td strong { font-size: 11px; }
+  .page-content .stock-card-name > strong { font-size: 13px; }
+  .page-content .stock-card-sub { font-size: 11px; }
+  .page-content .stock-card-batch { font-size: 9px; }
+  .page-content .stock-card-qty small { font-size: 10px; }
+  .page-content .waste-history-row strong, .page-content .expense-history-main strong { font-size: 12px; }
+  .page-content .waste-history-row small, .page-content .expense-history-main > span { font-size: 10px; }
+  .page-content .expense-history-amount { font-size: 13px; }
+  .page-content .expense-history-amount a { font-size: 10px; }
+
+  /* Front and Kitchen touch workflows. */
+  .page-content[data-role='front'] .front-work-tabs button { min-height: 52px; font-size: 13px; }
+  .page-content[data-role='front'] .today-action-copy strong { font-size: 13px; }
+  .page-content[data-role='front'] .today-action-copy small { font-size: 11px; }
+  .page-content[data-role='front'] .today-action-value { font-size: 14px; }
+  .page-content[data-role='front'] .closing-count-head { font-size: 9px; }
+  .page-content[data-role='front'] .closing-batch-info strong { font-size: 12px; }
+  .page-content[data-role='front'] .closing-batch-info small,
+  .page-content[data-role='front'] .closing-calc-note,
+  .page-content[data-role='front'] .closing-footnote { font-size: 10px; }
+  .page-content[data-role='front'] .closing-count-label { font-size: 10px; }
+  .page-content[data-role='front'] .closing-count-label small { font-size: 9px; }
+  .page-content[data-role='front'] .closing-quantity-cell small { font-size: 9px; }
+  .page-content[data-role='front'] .closing-quantity-cell > span { font-size: 9px; }
+  .page-content[data-role='kitchen'] .today-summary-panel { padding: 26px; }
+  .page-content[data-role='kitchen'] .today-summary-panel h2 { font-size: 25px; }
+  .page-content[data-role='kitchen'] .today-summary-panel p { font-size: 13px; }
+
+  /* Manager and Admin reporting. */
+  .page-content .report-controls label, .page-content .report-filter-row > span { font-size: 10px; }
+  .page-content .report-range-title strong { font-size: 12px; }
+  .page-content .report-range-title small, .page-content .report-filter-hint { font-size: 10px; }
+  .page-content .report-filter-row select { min-height: 40px; }
+  .page-content .report-metric > span { font-size: 10px; }
+  .page-content .report-metric > strong { font-size: 25px; }
+  .page-content .report-metric > strong small { font-size: 11px; }
+  .page-content .report-metric > p { font-size: 10px; }
+  .page-content .report-data-table { font-size: 12px; }
+  .page-content .report-data-table th, .page-content .report-data-table td { padding: 13px 14px; }
+  .page-content .report-data-table thead th { font-size: 10px; }
+  .page-content .report-data-table tbody th, .page-content .report-data-table tbody td { font-size: 12px; }
+  .page-content .report-source-main strong { font-size: 12px; }
+  .page-content .report-source-main small, .page-content .report-source-quantity,
+  .page-content .report-source-detail, .page-content .report-list-limit { font-size: 10px; }
+  .page-content .report-domain-tabs button { min-height: 46px; font-size: 12px; }
+  .page-content .dashboard-range-switch button { min-height: 38px; font-size: 11px; }
+  .page-content .metric-label { font-size: 12px; }
+  .page-content .metric-value { font-size: 29px; }
+  .page-content .metric-foot { font-size: 10px; }
+  .page-content .analysis-detail-main > strong { font-size: 12px; }
+  .page-content .analysis-detail-main > small { font-size: 10px; }
+  .page-content .analysis-detail-end small { font-size: 9px; }
+  .page-content .analysis-panel-note { font-size: 10px; }
+
+  /* Website Admin and Auditor reference lists. */
+  .page-content .manage-tab { min-height: 54px; font-size: 11px; }
+  .page-content .manage-content { padding: 24px; }
+  .page-content .manage-help { font-size: 11px; }
+  .page-content .manage-item-name strong { font-size: 12px; }
+  .page-content .manage-item-name small, .page-content .manage-edit-shelf { font-size: 10px; }
+  .page-content .member-admin-identity strong, .page-content .member-name-input { font-size: 12px; }
+  .page-content .member-admin-identity small, .page-content .member-role-field { font-size: 10px; }
+  .page-content .member-role-field select { min-height: 40px; font-size: 11px; }
+  .page-content .member-active-field { font-size: 11px; }
+  .page-content .manage-side-note, .page-content .settings-footnote { font-size: 10px; }
+  .page-content .activity-description { font-size: 12px; }
+  .page-content .activity-type, .page-content .activity-row time { font-size: 10px; }
+  .page-content .audit-event-main strong { font-size: 12px; }
+  .page-content .audit-event-main small, .page-content .audit-event summary time,
+  .page-content .audit-event-details { font-size: 10px; }
+  .page-content .audit-event-details pre { font-size: 10px; }
+
+  /* Co-living records match the larger dashboard scale. */
+  .page-content[data-role='coliving'] .coliving-dashboard-grid .report-data-table tbody th,
+  .page-content[data-role='coliving'] .coliving-dashboard-grid .report-data-table tbody td { font-size: 13px; }
+  .page-content[data-role='coliving'] .coliving-entry-button { min-height: 46px; font-size: 12px; }
+  .page-content[data-role='coliving'] .coliving-record-filters .button { min-height: 40px; font-size: 11px; }
+  .page-content[data-role='coliving'] .coliving-record summary { min-height: 76px; }
+  .page-content[data-role='coliving'] .coliving-record-main strong { font-size: 12px; }
+  .page-content[data-role='coliving'] .coliving-record-main small,
+  .page-content[data-role='coliving'] .coliving-record-quantity small { font-size: 10px; }
+  .page-content[data-role='coliving'] .coliving-record-quantity strong { font-size: 15px; }
+  .page-content[data-role='coliving'] .coliving-record-amount { font-size: 12px; }
+  .page-content[data-role='coliving'] .coliving-status { font-size: 10px; }
+  .page-content[data-role='coliving'] .coliving-record-info span,
+  .page-content[data-role='coliving'] .coliving-history article strong { font-size: 11px; }
+  .page-content[data-role='coliving'] .coliving-history article small,
+  .page-content[data-role='coliving'] .coliving-history > small,
+  .page-content[data-role='coliving'] .coliving-audit-note { font-size: 10px; }
+}
+@media (max-width: 900px) { .coliving-dashboard-grid { grid-template-columns: 1fr; } .coliving-summary-grid { grid-template-columns: 1fr; } .coliving-entry-summary { display: none; } .coliving-form-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .coliving-actions { width: 100%; }.coliving-actions .button { flex: 1; min-height: 42px; }.coliving-range { align-items: stretch; flex-wrap: wrap; gap: 10px; }.coliving-range-title { flex-basis: 100%; }.coliving-range label { flex: 1; min-width: 120px; }.coliving-range input { width: 100%; min-height: 40px; }.coliving-summary-card { padding: 12px; }.coliving-summary-title { font-size: 12px; }.coliving-summary-total small { font-size: 9px; }.coliving-summary-stats { gap: 6px; }.coliving-summary-stats > div { padding: 8px 7px; }.coliving-summary-stats span { font-size: 9px; }.coliving-summary-stats strong { font-size: 13px; }.coliving-package-card { grid-template-columns: minmax(24px, 1fr) auto 14px; gap: 5px; padding: 7px; }.coliving-package-price strong { font-size: 9px; }.coliving-empty-state { align-items: flex-start; flex-direction: column; gap: 6px; }.coliving-record summary { grid-template-columns: 34px minmax(0, 1fr) auto; gap: 7px; padding: 10px 3px; }.coliving-record-icon { width: 32px; height: 32px; }.coliving-record-quantity { grid-column: 3; grid-row: 1; }.coliving-record-amount { grid-column: 2; grid-row: 2; text-align: left; }.coliving-status { grid-column: 3; grid-row: 2; }.coliving-record-details { padding: 2px 3px 12px; }.coliving-record-info { gap: 8px; }.coliving-record-filters { width: 100%; }.coliving-record-filters .button { flex: 1; min-width: 0; padding: 0 6px; font-size: 9px; } }
+
+@media (max-width: 820px) {
+  .page-content .eyebrow { font-size: 9px; }
+  .page-content .page-title-row p { font-size: 12px; }
+  .page-content .section-heading h2, .page-content .panel-head h2 { font-size: 16px; }
+  .page-content .button { font-size: 12px; }
+  .page-content .button-small { font-size: 11px; }
+  .page-content .data-form > label, .page-content .form-two-cols label,
+  .page-content .closing-date-row label { font-size: 11px; }
+  .page-content .data-form input, .page-content .data-form select, .page-content .data-form textarea,
+  .page-content .closing-date-row input, .page-content .closing-batch-row input,
+  .page-content .report-controls input, .page-content .report-filter-row select { min-height: 44px; font-size: 16px; }
+  .page-content .data-form textarea { min-height: 82px; }
+  .page-content .front-work-tabs button { min-height: 54px; font-size: 10px; }
+  .page-content .front-stock-tabs button { min-height: 46px; font-size: 11px; }
+  .page-content[data-role='kitchen'] .today-summary-panel h2 { font-size: 22px; }
+  .page-content .report-range-title strong { font-size: 12px; }
+  .page-content .report-metric > span, .page-content .report-metric > p { font-size: 9px; }
+  .page-content .report-data-table thead th { font-size: 9px; }
+  .page-content .report-data-table tbody th, .page-content .report-data-table tbody td { font-size: 11px; }
+  .page-content .manage-tab { min-height: 46px; font-size: 9px; }
+  .page-content .manage-item-name strong, .page-content .member-admin-identity strong,
+  .page-content .member-name-input { font-size: 11px; }
+  .page-content .coliving-entry-button { min-height: 44px; font-size: 11px; }
+  .page-content .coliving-record-main strong { font-size: 11px; }
+  .page-content .coliving-record-main small, .page-content .coliving-record-info span,
+  .page-content .coliving-history article small { font-size: 9px; }
+  .mobile-bottom-nav .bottom-nav-item { font-size: 9px; }
+}
+
+@media (max-width: 560px) {
+  .page-content[data-role='front'] .front-work-tabs button { font-size: 10px; }
+  .page-content .report-controls label { font-size: 10px; }
+  .page-content .closing-batch-info strong { font-size: 12px; }
+  .page-content .closing-batch-info small, .page-content .closing-footnote,
+  .page-content .closing-calc-note { font-size: 10px; }
+  .page-content .coliving-record-filters .button { font-size: 9px; }
+}
+
+@media (max-width: 360px) {
+  .page-content[data-role='coliving'] .coliving-range label { flex: 1 1 100%; min-width: 0; }
+  .page-content[data-role='coliving'] .coliving-range input { width: 100%; min-height: 44px; padding-right: 8px; padding-left: 8px; font-size: 16px; }
 }
