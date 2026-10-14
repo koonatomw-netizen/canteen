@@ -1,22 +1,28 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { lazy, type ComponentType, type ReactNode } from 'react';
 import { AppShell } from './components/AppShell';
 import { LoadingState, Notice } from './components/Feedback';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
 import { LoginPage } from './features/auth/LoginPage';
-import { ActivityPage } from './features/activity/ActivityPage';
-import { ClosingPage } from './features/closing/ClosingPage';
-import { DashboardPage } from './features/dashboard/DashboardPage';
-import { ExpensesPage } from './features/expenses/ExpensesPage';
-import { ManagePage } from './features/manage/ManagePage';
-import { MenuItemsPage } from './features/menus/MenuItemsPage';
-import { ProductionPage } from './features/production/ProductionPage';
-import { ReportsPage } from './features/reports/ReportsPage';
-import { StockPage } from './features/stock/StockPage';
-import { WastePage } from './features/waste/WastePage';
-import { TodayPage } from './features/home/TodayPage';
-import { ColivingPage } from './features/coliving/ColivingPage';
 import { I18nProvider } from './lib/i18n';
+
+// Each page is downloaded the first time it is opened, so staff only load the
+// screens their role uses. AppShell shows a loading state while a page arrives.
+function lazyPage<P extends object>(load: () => Promise<ComponentType<P>>) {
+  return lazy(async () => ({ default: await load() }));
+}
+const ActivityPage = lazyPage(() => import('./features/activity/ActivityPage').then((m) => m.ActivityPage));
+const ClosingPage = lazyPage(() => import('./features/closing/ClosingPage').then((m) => m.ClosingPage));
+const DashboardPage = lazyPage(() => import('./features/dashboard/DashboardPage').then((m) => m.DashboardPage));
+const ExpensesPage = lazyPage(() => import('./features/expenses/ExpensesPage').then((m) => m.ExpensesPage));
+const ManagePage = lazyPage(() => import('./features/manage/ManagePage').then((m) => m.ManagePage));
+const MenuItemsPage = lazyPage(() => import('./features/menus/MenuItemsPage').then((m) => m.MenuItemsPage));
+const ProductionPage = lazyPage(() => import('./features/production/ProductionPage').then((m) => m.ProductionPage));
+const ReportsPage = lazyPage(() => import('./features/reports/ReportsPage').then((m) => m.ReportsPage));
+const StockPage = lazyPage(() => import('./features/stock/StockPage').then((m) => m.StockPage));
+const WastePage = lazyPage(() => import('./features/waste/WastePage').then((m) => m.WastePage));
+const TodayPage = lazyPage(() => import('./features/home/TodayPage').then((m) => m.TodayPage));
+const ColivingPage = lazyPage(() => import('./features/coliving/ColivingPage').then((m) => m.ColivingPage));
 import { canAccessRoute, homePathForRole } from './features/auth/permissions';
 import { useI18n } from './lib/i18n';
 import { LanguageToggle } from './components/LanguageToggle';

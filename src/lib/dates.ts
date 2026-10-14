@@ -1,5 +1,3 @@
-import { format } from 'date-fns';
-
 export const BUSINESS_TIME_ZONE = 'Asia/Bangkok';
 
 export function businessDateNow(): string {
@@ -14,7 +12,7 @@ export function businessDateNow(): string {
 export function addCalendarDays(date: string, days: number): string {
   const parsed = new Date(`${date}T00:00:00.000Z`);
   parsed.setUTCDate(parsed.getUTCDate() + days);
-  return format(parsed, 'yyyy-MM-dd');
+  return parsed.toISOString().slice(0, 10);
 }
 
 export function formatBusinessDate(date: string): string {

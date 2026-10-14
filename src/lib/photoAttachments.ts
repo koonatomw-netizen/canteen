@@ -26,9 +26,12 @@ export async function attachPrivatePhotos(db: SupabaseClient, folder: PhotoFolde
 
 export async function signPrivatePhotos(db: SupabaseClient, paths: string[]) {
   const uniquePaths = [...new Set(paths.filter(Boolean))];
-  const pairs = await Promise.all(uniquePaths.map(async (path) => {
-    const { data } = await db.storage.from('operational-photos').createSignedUrl(path, 300);
-    return [path, data?.signedUrl ?? ''] as const;
-  }));
-  return Object.fromEntries(pairs);
+  if (!uniquePaths.length) return {};
+  // One request for all photos instead of one request per photo.
+  const { data } = await db.storage.from('operational-photos').createSignedUrls(uniquePaths, 300);
+  const signed: Record<string, string> = Object.fromEntries(uniquePaths.map((path) => [path, '']));
+  for (const item of data ?? []) {
+    if (item.path && item.signedUrl && !item.error) signed[item.path] = item.signedUrl;
+  }
+  return signed;
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   Archive, BarChart3, Boxes, CalendarCheck, ChevronDown, ClipboardList,
@@ -10,6 +10,7 @@ import type { AppRole } from '../features/auth/AuthContext';
 import { isReadOnlyDemo, roleLabels } from '../features/auth/permissions';
 import { businessDateNow, formatBusinessDate } from '../lib/dates';
 import { useI18n } from '../lib/i18n';
+import { LoadingState } from './Feedback';
 import { LanguageToggle } from './LanguageToggle';
 
 type NavGroupId = 'overview' | 'canteen' | 'coliving' | 'administration' | 'staff' | 'coliving-staff';
@@ -165,7 +166,7 @@ export function AppShell() {
         </header>
         <div className="page-content" data-role={role} data-readonly-demo={isReadOnlyDemo(role) ? 'true' : undefined}>
           {isReadOnlyDemo(role) && <div className="readonly-demo-banner" role="status"><ShieldCheck size={18} /><span><strong>{t('WEBSITE AUDITOR · DEMO VIEW')}</strong><small>{t('All pages and action buttons are visible. Changes, uploads, and stock actions are disabled for this account.')}</small></span></div>}
-          <Outlet />
+          <Suspense fallback={<LoadingState />}><Outlet /></Suspense>
         </div>
       </main>
       <nav className="mobile-bottom-nav" aria-label={t('Quick navigation')}>
