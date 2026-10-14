@@ -58,6 +58,7 @@ export function DashboardPage() {
   const { member } = useAuth();
   const { t } = useI18n();
   const showWorkflowLinks = canViewAdminWorkflow(member?.role);
+  const canViewExpenses = member?.role === 'admin';
   const today = businessDateNow();
   const [range, setRange] = useState<DashboardRange>('today');
   const rangeStart = range === 'today' ? today : range === '7days' ? addCalendarDays(today, -6) : `${today.slice(0, 8)}01`;
@@ -91,7 +92,7 @@ export function DashboardPage() {
         db.from('waste_records').select('id, quantity, reason, notes, waste_date, created_at, production_batches(menu_name_snapshot, production_date, meat_options(name))').gte('waste_date', rangeStart).lte('waste_date', today).is('deleted_at', null).order('created_at', { ascending: false }),
         db.from('post_close_stock_outs').select('id, quantity, reason, notes, removal_date, created_at, production_batches(menu_name_snapshot, production_date, meat_options(name))').gte('removal_date', rangeStart).lte('removal_date', today).is('deleted_at', null).order('created_at', { ascending: false }),
         db.from('v_stock_by_batch').select('id, menu_name, production_date, expiry_date, quantity_remaining').gt('quantity_remaining', 0).order('expiry_date'),
-        db.from('expenses').select('id, amount_thb, notes, created_at, stores(name), expense_categories(name)').gte('expense_date', rangeStart).lte('expense_date', today).is('deleted_at', null).order('created_at', { ascending: false }),
+        canViewExpenses ? db.from('expenses').select('id, amount_thb, notes, created_at, stores(name), expense_categories(name)').gte('expense_date', rangeStart).lte('expense_date', today).is('deleted_at', null).order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null }),
         db.from('daily_closings').select('business_date, status, version, closed_at, note, closing_batch_counts(production_batch_id, expected_quantity, physical_remaining_quantity, calculated_sold_quantity, stock_adjustment_quantity, adjustment_reason, production_batches(menu_name_snapshot, production_date, meat_options(name)))').gte('business_date', rangeStart).lte('business_date', today).order('business_date').order('version'),
       ]);
       if (!alive) return;
@@ -107,7 +108,7 @@ export function DashboardPage() {
     }
     void load();
     return () => { alive = false; };
-  }, [today, rangeStart]);
+  }, [today, rangeStart, canViewExpenses]);
 
   const producedTotal = production.reduce((sum, row) => sum + Number(row.quantity_produced), 0);
   const wasteTotal = waste.reduce((sum, row) => sum + Number(row.quantity), 0);
@@ -129,7 +130,7 @@ export function DashboardPage() {
   const activeDetail = detailView ? detailTitles[detailView] : null;
 
   return <>
-    <PageTitle eyebrow="THE DAY AT A GLANCE" title="Dashboard" detail="Daily food, waste, stock and spending, with the records behind every number." />
+    <PageTitle eyebrow="THE DAY AT A GLANCE" title="Dashboard" detail={canViewExpenses ? 'Daily food, waste, stock and spending, with the records behind every number.' : 'Daily food, waste and stock, with the records behind every number.'} />
     {error && <Notice>{error}</Notice>}
     <section className="dashboard-summary" aria-labelledby="dashboard-summary-title">
       <div className="section-heading dashboard-section-heading"><div><span className="eyebrow">{t('SELECTED PERIOD')}</span><h2 id="dashboard-summary-title">{selectedRangeText}</h2></div><span className="soft-chip"><span className="live-dot" /> {t('TAP A CARD FOR DETAILS')}</span></div>
@@ -143,7 +144,7 @@ export function DashboardPage() {
         <MetricCard icon={Trash2} label={isToday ? 'Waste today' : 'Waste in selected period'} value={busy ? '—' : formatQuantity(wasteTotal)} foot={`${waste.length} ${t(waste.length === 1 ? 'waste record' : 'waste records')} · ${t('tap for details')}`} tone="peach" onClick={() => setDetailView('waste')} />
         <MetricCard icon={PackageOpen} label="Taken after closing" value={busy ? '—' : formatQuantity(stockOutTotal)} foot={`${stockOuts.length} ${t(stockOuts.length === 1 ? 'stock removal record' : 'stock removal records')} · ${t('excluded from waste')}`} tone="green" onClick={() => setDetailView('stock-out')} />
         <MetricCard icon={ClipboardList} label="Waste rate" value={busy ? '—' : wasteRate} foot={`${t(producedTotal ? (isToday ? 'Waste ÷ today’s production' : 'Waste ÷ production in selected period') : 'Unavailable without production')} · ${t('tap for details')}`} tone="lilac" onClick={() => setDetailView('waste')} />
-        <MetricCard icon={ReceiptText} label={isToday ? 'Expenses today' : 'Expenses in selected period'} value={busy ? '—' : formatBaht(expenseTotal)} foot={`${expenses.length} ${t(expenses.length === 1 ? 'purchase' : 'purchases')} · ${t('tap for details')}`} tone="blue" money onClick={() => setDetailView('expenses')} />
+        {canViewExpenses && <MetricCard icon={ReceiptText} label={isToday ? 'Expenses today' : 'Expenses in selected period'} value={busy ? '—' : formatBaht(expenseTotal)} foot={`${expenses.length} ${t(expenses.length === 1 ? 'purchase' : 'purchases')} · ${t('tap for details')}`} tone="blue" money onClick={() => setDetailView('expenses')} />}
       </div>
     </section>
 
@@ -185,7 +186,7 @@ export function DashboardPage() {
         {showWorkflowLinks && <Link className="text-link dashboard-detail-link" to="/closing">{t('View daily closing workflow')}</Link>}
       </section>}
 
-      {detailView === 'expenses' && <section className="panel dashboard-detail-panel">
+      {detailView === 'expenses' && canViewExpenses && <section className="panel dashboard-detail-panel">
         <div className="dashboard-detail-context"><span className="count-chip">{expenses.length} {t('PURCHASES')}</span><span className="analysis-panel-note">{selectedRangeText}</span></div>
         {busy ? <LoadingState label="Loading expense details…" /> : expenses.length === 0 ? <EmptyState title="No expenses in this period" detail="Store, category and purchase amount will appear here when logged." /> : <div className="analysis-detail-list">{expenses.map((row) => <DetailRow key={row.id} icon={ReceiptText} title={row.stores?.name ?? 'Other store'} detail={`${row.expense_categories?.name ?? 'Expense'} · ${formatBangkokTime(row.created_at)}`} note={row.notes} amount={formatBaht(row.amount_thb)} amountLabel="THB" />)}</div>}
         {showWorkflowLinks && <Link className="text-link dashboard-detail-link" to="/expenses">{t('View expenses workflow')}</Link>}

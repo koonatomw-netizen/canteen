@@ -55,9 +55,9 @@ function AuthenticatedRoutes() {
   if (loading || (session && memberLoading)) return <main className="auth-loading"><LoadingState /></main>;
   if (!session) return <LoginPage />;
   if (memberError || !member?.active) return <main className="access-screen"><section className="panel access-card"><div className="setup-language-toggle"><LanguageToggle /></div><span className="eyebrow">{t('STAFF ACCESS')}</span><h1>{t('Your sign-in needs a team invitation.')}</h1><p>{t(memberError ? 'The team membership could not be checked. Check the connection and try signing in again.' : 'This account has not been added to your canteen yet. Ask the canteen administrator to add you to the staff list.')}</p>{memberError && <Notice>{memberError}</Notice>}<button className="button button-quiet" onClick={() => void signOut()}>{t('Sign out')}</button></section></main>;
-  const Home = member.role === 'front' || member.role === 'kitchen' ? TodayPage : member.role === 'manager' ? ReportsPage : DashboardPage;
+  const Home = member.role === 'front' ? TodayPage : member.role === 'manager' ? ReportsPage : DashboardPage;
   return <Routes><Route element={<AppShell />}>
-    <Route index element={<Home />} />
+    <Route index element={member.role === 'kitchen' ? <Navigate to="/expenses" replace /> : <Home />} />
     <Route path="production" element={<RoleGate><FrontWorkflowRedirect tab="production"><ProductionPage /></FrontWorkflowRedirect></RoleGate>} />
     <Route path="menus" element={<RoleGate><MenuItemsPage /></RoleGate>} />
     <Route path="stock" element={<RoleGate><FrontWorkflowRedirect tab="stock" section="stock"><StockPage /></FrontWorkflowRedirect></RoleGate>} />

@@ -14,14 +14,14 @@ import { LanguageToggle } from './LanguageToggle';
 
 const links: { to: string; label: string; icon: typeof Archive; roles: AppRole[]; section: 'workspace' | 'admin' }[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'auditor'], section: 'workspace' },
-  { to: '/', label: 'Today', icon: CalendarCheck, roles: ['front', 'kitchen'], section: 'workspace' },
+  { to: '/', label: 'Today', icon: CalendarCheck, roles: ['front'], section: 'workspace' },
   { to: '/', label: 'Reports', icon: BarChart3, roles: ['manager'], section: 'workspace' },
   { to: '/production', label: 'Production', icon: ShoppingBasket, roles: ['admin', 'auditor'], section: 'workspace' },
   { to: '/menus', label: 'Menu items', icon: UtensilsCrossed, roles: ['admin', 'auditor'], section: 'workspace' },
   { to: '/stock', label: 'Stock & expiry', icon: Boxes, roles: ['admin', 'auditor'], section: 'workspace' },
   { to: '/waste', label: 'Waste', icon: Trash2, roles: ['admin', 'auditor'], section: 'workspace' },
   { to: '/closing', label: 'Daily closing', icon: CalendarCheck, roles: ['admin', 'auditor'], section: 'workspace' },
-  { to: '/expenses', label: 'Expenses', icon: ReceiptText, roles: ['admin', 'front', 'kitchen', 'auditor'], section: 'workspace' },
+  { to: '/expenses', label: 'Expenses', icon: ReceiptText, roles: ['admin', 'kitchen'], section: 'workspace' },
   { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'auditor'], section: 'workspace' },
   { to: '/manage', label: 'Manage', icon: Settings2, roles: ['admin', 'auditor'], section: 'admin' },
   { to: '/activity', label: 'Activity log', icon: ClipboardList, roles: ['admin', 'auditor'], section: 'admin' },
@@ -31,7 +31,7 @@ const mobileLinkOrder: Record<AppRole, string[]> = {
   admin: ['/', '/stock', '/waste', '/closing', '/manage'],
   manager: ['/'],
   front: ['/'],
-  kitchen: ['/', '/expenses'],
+  kitchen: ['/expenses'],
   auditor: ['/', '/stock', '/waste', '/closing', '/manage'],
 };
 

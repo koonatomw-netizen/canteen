@@ -95,11 +95,11 @@ Keep navigation focused on each team's daily work:
 
 - **Front:** one **Today** workspace with tabs for Production, Stock & Waste,
   and Daily Closing. Stock and waste stay in the same workspace; starting a
-  waste record from a stock batch carries that batch into the form. Front can
-  also open Expenses in read-only mode. Add Menu is available as a dialog from
-  Production.
-- **Kitchen:** Today and Expenses, with expense entry and saved receipts on the
-  same Expenses page.
+  waste record from a stock batch carries that batch into the form. Add Menu is
+  available as a dialog from Production.
+- **Kitchen:** one **Expenses** workspace, which is the Kitchen landing page.
+  Kitchen can submit purchases and receipt photos but cannot view saved
+  expense records, historical amounts, receipt photos, or expense audit events.
 - **Manager:** one **Reports** page for the analytical overview and detailed
   report, with one date range controlling metrics, charts, breakdowns, and
   source records.
@@ -123,19 +123,22 @@ Use five fixed application roles, enforced in both the interface and
 Postgres row-level security:
 
 - **Front** records production, waste, after-close stock removals, and daily
-  closing. Front can view current stock and expenses but cannot change
-  expenses.
+  closing. Front cannot access expense records or receipts.
 - Front can also create active menu items (name, shelf life, optional notes).
   Editing, deactivating, or removing existing menus remains Website Admin-only.
-- **Kitchen** records and edits expenses at any time, including after a daily
-  close. Kitchen does not write stock or closing records.
+- **Kitchen** creates expenses and attaches receipt photos at any time,
+  including after a daily close. Kitchen cannot read historical expense data,
+  totals, receipts, or expense audit events, and cannot correct or archive an
+  expense after submission. Kitchen does not write stock or closing records.
 - **Manager** reads the combined Reports page with analysis metrics and
   detailed records only. Stock figures in a report are read-only; Managers
   cannot change operational records or reopen a closing.
-- **Website Auditor** can inspect every workspace, report, activity log, user,
-  and configuration detail, including private operational photos. This role
-  is strictly read-only: it cannot create, update, archive, delete, or execute
-  stock, closing, expense, or configuration changes.
+- **Website Auditor** can inspect operational workspaces, reports, activity
+  log, users, and configuration details, including private waste photos. This
+  role is strictly read-only: it cannot create, update, archive, delete, or
+  execute stock, closing, expense, or configuration changes. Expense amounts,
+  receipt photos, and expense audit events are restricted to Managers and
+  Website Admins.
 - **Website Admin** manages users/roles and shared configuration, can access
   all pages, and may reopen a closing with a required reason.
 
@@ -495,12 +498,21 @@ Record food that leaves stock after a day has been closed in a separate
 batch, quantity, date, reason, and optional note. “Other” requires a note.
 Reasons are configurable by a Website Admin.
 
+The Front/Admin form follows the latest closing status for the current
+Bangkok business date. A date without a closing, or a date reopened by an
+Admin, shows the Waste form. After staff close the date, the page switches to
+**Taken after closing**. The close action is the state change; there is no
+time-of-day cutoff. When the Bangkok business date advances to a date without
+a closing, the page returns to the Waste form. Read-only roles may switch
+between the two history views.
+
 This movement reduces current batch stock and appears in dashboard, reports,
 and exports as a separate total. It is not included in Waste quantities or
 the waste rate. Keep the original closing count unchanged as a snapshot of
 the physical count at close. Do not backdate a removal before the latest
-closed day. Archive/restore actions create compensating ledger movements and
-audit events.
+closed day, and do not record a post-close removal against a date unless its
+latest closing version is closed. Archive/restore actions create compensating
+ledger movements and audit events.
 
 ------------------------------------------------------------------------
 
@@ -636,9 +648,12 @@ Do not require itemized receipt entry.
 
 A Makro receipt for ฿2,223 is stored as one expense.
 
-Only Kitchen and Website Admin can create, edit, archive, or restore
-expenses. Front may review active expenses and private receipts as
-read-only. Managers see expense totals and details through reports.
+Kitchen and Website Admin can create expenses. Kitchen can attach receipt
+photos during submission, then sees only a success confirmation; it cannot
+review historical amounts, records, receipts, or audit details. Only Website
+Admin can edit, archive, or restore expenses after submission. Managers and
+Website Admins can review expense totals, details, and private receipts through
+Reports. Front and Website Auditor cannot access expense records or receipts.
 
 ## 13.2 Expense Categories
 

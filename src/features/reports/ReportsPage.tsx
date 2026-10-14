@@ -78,7 +78,7 @@ function withSignedPhotoUrls<T extends { id: string }>(rows: T[], paths: string[
   return rows.map((row, index) => ({ ...row, photoUrls: (paths[index] ?? []).map((path) => signedUrls[path]).filter(Boolean) }));
 }
 
-function getDateOptions(rows: ReportRows, stock: Stock[]) {
+function getDateOptions(rows: ReportRows, stock: Stock[], stockOuts: StockOut[] = []) {
   const menus = new Set<string>();
   const meats = new Set<string>();
   const add = (menu: string | undefined, meat: string | undefined) => {
@@ -87,6 +87,7 @@ function getDateOptions(rows: ReportRows, stock: Stock[]) {
   };
   for (const row of rows.production) add(row.menu_name_snapshot, row.meat_options?.name);
   for (const row of rows.waste) add(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name);
+  for (const row of stockOuts) add(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name);
   for (const closing of rows.closings) for (const count of closing.closing_batch_counts ?? []) add(count.production_batches?.menu_name_snapshot, count.production_batches?.meat_options?.name);
   for (const row of stock) {
     const separator = row.menu_name.lastIndexOf(' · ');
@@ -99,6 +100,7 @@ export function ReportsPage() {
   const { member } = useAuth();
   const { t } = useI18n();
   const canViewActivity = member?.role === 'admin' || member?.role === 'auditor';
+  const canViewExpenses = member?.role === 'admin' || member?.role === 'manager';
   const today = businessDateNow();
   const [start, setStart] = useState(`${today.slice(0, 8)}01`);
   const [end, setEnd] = useState(today);
@@ -133,7 +135,7 @@ export function ReportsPage() {
         readAll<Production>((from, to) => productionQuery(from, to, start, end)),
         readAll<Waste>((from, to) => wasteQuery(from, to, start, end)),
         readAll<StockOut>((from, to) => db.from('post_close_stock_outs').select('id, removal_date, quantity, reason, notes, production_batches(menu_name_snapshot, production_date, meat_options(name))').gte('removal_date', start).lte('removal_date', end).is('deleted_at', null).order('removal_date', { ascending: false }).range(from, to)),
-        readAll<Expense>((from, to) => expenseQuery(from, to, start, end)),
+        canViewExpenses ? readAll<Expense>((from, to) => expenseQuery(from, to, start, end)) : Promise.resolve({ data: [] as Expense[], error: null }),
         readAll<Stock>((from, to) => db.from('v_stock_by_batch').select('id, menu_name, production_date, expiry_date, quantity_remaining').gt('quantity_remaining', 0).order('expiry_date').range(from, to)),
         canViewActivity
           ? readAll<Activity>((from, to) => db.from('activity_logs').select('id, occurred_at, action, entity_type, description').gte('occurred_at', `${start}T00:00:00+07:00`).lt('occurred_at', `${nextDay}T00:00:00+07:00`).order('occurred_at', { ascending: false }).range(from, to))
@@ -141,7 +143,7 @@ export function ReportsPage() {
         readAll<DailyClosing>((from, to) => closingQuery(from, to, start, end)),
         readAll<Production>((from, to) => productionQuery(from, to, previousRange.start, previousRange.end)),
         readAll<Waste>((from, to) => wasteQuery(from, to, previousRange.start, previousRange.end)),
-        readAll<Expense>((from, to) => expenseQuery(from, to, previousRange.start, previousRange.end)),
+        canViewExpenses ? readAll<Expense>((from, to) => expenseQuery(from, to, previousRange.start, previousRange.end)) : Promise.resolve({ data: [] as Expense[], error: null }),
         readAll<DailyClosing>((from, to) => closingQuery(from, to, previousRange.start, previousRange.end)),
       ]);
       if (!alive) return;
@@ -176,9 +178,9 @@ export function ReportsPage() {
     }
     void load();
     return () => { alive = false; };
-  }, [start, end, canViewActivity]);
+  }, [start, end, canViewActivity, canViewExpenses]);
 
-  const dateOptions = getDateOptions({ production: [...production, ...previous.production], waste: [...waste, ...previous.waste], closings: [...closings, ...previous.closings], expenses }, stock);
+  const dateOptions = getDateOptions({ production: [...production, ...previous.production], waste: [...waste, ...previous.waste], closings: [...closings, ...previous.closings], expenses }, stock, stockOuts);
   const menus = [...new Set([...dateOptions.menus, ...(menuFilter ? [menuFilter] : [])])].sort((a, b) => a.localeCompare(b));
   const meats = [...new Set([...dateOptions.meats, ...(meatFilter ? [meatFilter] : [])])].sort((a, b) => a.localeCompare(b));
   const reasonOptions = [...new Set([...waste, ...previous.waste].map((row) => row.reason).concat(wasteReasonFilter ? [wasteReasonFilter] : []))].sort((a, b) => a.localeCompare(b));
@@ -220,7 +222,7 @@ export function ReportsPage() {
     { label: 'Waste', value: totalWaste, previous: previousWasteTotal, format: formatQuantity },
     { label: 'Waste rate', value: wasteRate, previous: previousWasteRate, format: (value: number) => `${Math.round(value)}%`, suffix: 'percentage points' },
     { label: 'Inferred sold', value: totalSold, previous: previousSold, format: formatQuantity },
-    { label: 'Expenses', value: totalExpenses, previous: previousExpensesTotal, format: formatBaht },
+    ...(canViewExpenses ? [{ label: 'Expenses', value: totalExpenses, previous: previousExpensesTotal, format: formatBaht }] : []),
   ];
   const changeText = (value: number | null, oldValue: number | null, format: (amount: number) => string) => {
     if (value === null) return t('Unavailable without production');
@@ -264,7 +266,7 @@ export function ReportsPage() {
   }, {})).sort((a, b) => b[1] - a[1]);
 
   const exports: { label: string; icon: typeof ReceiptText; rows: Array<Record<string, unknown>> }[] = [
-    { label: 'Expenses', icon: ReceiptText, rows: filteredExpenses.map((row) => ({ date: row.expense_date, store: row.stores?.name ?? '', category: row.expense_categories?.name ?? '', amount_thb: row.amount_thb, notes: row.notes })) },
+    ...(canViewExpenses ? [{ label: 'Expenses', icon: ReceiptText, rows: filteredExpenses.map((row) => ({ date: row.expense_date, store: row.stores?.name ?? '', category: row.expense_categories?.name ?? '', amount_thb: row.amount_thb, notes: row.notes })) }] : []),
     { label: 'Production', icon: UtensilsCrossed, rows: filteredProduction.map((row) => ({ date: row.production_date, menu: formatFoodVariant(row.menu_name_snapshot, row.meat_options?.name), quantity: row.quantity_produced, expiry_date: row.expiry_date })) },
     { label: 'Waste', icon: Trash2, rows: filteredWaste.map((row) => ({ date: row.waste_date, menu: wasteLabel(row), quantity: row.quantity, reason: row.reason, notes: row.notes })) },
     { label: 'After-close stock out', icon: PackageOpen, rows: filteredStockOuts.map((row) => ({ date: row.removal_date, menu: formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name), batch_date: row.production_batches?.production_date, quantity: row.quantity, reason: row.reason, notes: row.notes })) },
@@ -284,7 +286,7 @@ export function ReportsPage() {
   };
 
   return <>
-    <PageTitle eyebrow="THE PATTERNS BEHIND THE DAY" title="Reports" detail="A clear look at production, waste and spending, over a date range that works for you." action={<button type="button" className="button button-quiet" onClick={() => downloadCsv(`canteen-report-${start}-to-${end}.csv`, [...exports[0]!.rows])}><ArrowDownToLine size={16} /> {t('Export expenses')}</button>} />
+    <PageTitle eyebrow="THE PATTERNS BEHIND THE DAY" title="Reports" detail={canViewExpenses ? 'A clear look at production, waste and spending, over a date range that works for you.' : 'A clear look at production, waste and stock, over a date range that works for you.'} action={canViewExpenses ? <button type="button" className="button button-quiet" onClick={() => downloadCsv(`canteen-report-expenses-${start}-to-${end}.csv`, filteredExpenses.map((row) => ({ date: row.expense_date, store: row.stores?.name ?? '', category: row.expense_categories?.name ?? '', amount_thb: row.amount_thb, notes: row.notes })))}><ArrowDownToLine size={16} /> {t('Export expenses')}</button> : undefined} />
     {error && <Notice>{error}</Notice>}
     <section className="panel report-controls">
       <div className="report-range-title"><span className="report-range-icon"><CalendarRange size={18} /></span><span><strong>{t('Your reporting period')}</strong><small>{t('Both start and end dates are included.')}</small></span></div>
@@ -297,10 +299,10 @@ export function ReportsPage() {
         <label>{t('Menu')}<select value={menuFilter} onChange={(event) => setMenuFilter(event.target.value)}><option value="">{t('All menus')}</option>{menus.map((menu) => <option key={menu} value={menu}>{menu}</option>)}</select></label>
         <label>{t('Meat option')}<select value={meatFilter} onChange={(event) => setMeatFilter(event.target.value)}><option value="">{t('All meat options')}</option>{meats.map((meat) => <option key={meat} value={meat}>{meat}</option>)}</select></label>
         <label>{t('Waste reason')}<select value={wasteReasonFilter} onChange={(event) => setWasteReasonFilter(event.target.value)}><option value="">{t('All waste reasons')}</option>{reasonOptions.map((reason) => <option key={reason} value={reason}>{t(reason)}</option>)}</select></label>
-        <label>{t('Store')}<select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}><option value="">{t('All stores')}</option>{storeOptions.map((store) => <option key={store} value={store}>{store}</option>)}</select></label>
+        {canViewExpenses && <label>{t('Store')}<select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}><option value="">{t('All stores')}</option>{storeOptions.map((store) => <option key={store} value={store}>{store}</option>)}</select></label>}
         {!allFiltersClear && <button type="button" className="button button-quiet report-clear-filters" onClick={() => { setMenuFilter(''); setMeatFilter(''); setWasteReasonFilter(''); setStoreFilter(''); }}><RotateCcw size={14} /> {t('Clear filters')}</button>}
       </div>
-      <p className="report-filter-hint">{t('Menu and meat filter food records; reason filters waste; store filters expenses. Stock on hand is current, even for an earlier date range.')}</p>
+      <p className="report-filter-hint">{t(canViewExpenses ? 'Menu and meat filter food records; reason filters waste; store filters expenses. Stock on hand is current, even for an earlier date range.' : 'Menu and meat filter food records; reason filters waste. Stock on hand is current, even for an earlier date range.')}</p>
     </section>
 
     <section className="report-metrics">
@@ -308,7 +310,7 @@ export function ReportsPage() {
       <article className="report-metric report-metric-peach"><span><Trash2 size={17} /> {t('WASTE')}</span><strong>{busy ? '—' : formatQuantity(totalWaste)}<small>{t('boxes')}</small></strong><p><TrendingDown size={13} /> {wasteRate === null ? t('Unavailable without production') : `${Math.round(wasteRate)}% ${t('of produced stock')}`}</p></article>
       <article className="report-metric report-metric-green"><span><PackageOpen size={17} /> {t('TAKEN AFTER CLOSE')}</span><strong>{busy ? '—' : formatQuantity(totalStockOut)}<small>{t('boxes')}</small></strong><p>{t('Separate from actual food waste')}</p></article>
       <article className="report-metric report-metric-lilac"><span><CalendarRange size={17} /> {t('INFERRED SOLD')}</span><strong>{busy ? '—' : formatQuantity(totalSold)}<small>{t('boxes')}</small></strong><p>{filteredClosings.filter((day) => day.status === 'closed').length} {t('days closed in this range')}</p></article>
-      <article className="report-metric report-metric-blue"><span><ReceiptText size={17} /> {t('EXPENSES')}</span><strong className="report-currency">{busy ? '—' : formatBaht(totalExpenses)}</strong><p>{filteredExpenses.length} {t('purchases recorded')}</p></article>
+      {canViewExpenses && <article className="report-metric report-metric-blue"><span><ReceiptText size={17} /> {t('EXPENSES')}</span><strong className="report-currency">{busy ? '—' : formatBaht(totalExpenses)}</strong><p>{filteredExpenses.length} {t('purchases recorded')}</p></article>}
       <article className="report-metric report-metric-lilac"><span><BarChart3 size={17} /> {t('STOCK ON HAND')}</span><strong>{busy ? '—' : formatQuantity(stockOnHand)}<small>{t('boxes')}</small></strong><p>{filteredStock.length} {t('active batches today')}</p></article>
       <article className="report-metric report-metric-peach"><span><CalendarRange size={17} /> {t('EXPIRED STOCK')}</span><strong>{busy ? '—' : formatQuantity(expiredStock)}<small>{t('boxes')}</small></strong><p>{t('Current stock past its expiry date')}</p></article>
     </section>
@@ -317,31 +319,31 @@ export function ReportsPage() {
       <div className="comparison-grid">{comparison.map((item) => <article key={item.label}><span>{t(item.label)}</span><strong>{busy ? '—' : item.value === null ? '—' : item.format(item.value)}</strong><small>{busy ? '' : `${changeText(item.value, item.previous, item.format)}${item.value !== null && item.previous !== null && item.suffix ? ` ${t(item.suffix)}` : ''}`}</small></article>)}</div>
     </section>
 
-    <div className="report-grid report-chart-grid">
+    <div className={`report-grid report-chart-grid${canViewExpenses ? '' : ' report-chart-grid-single'}`}>
       <section className="panel report-chart-panel"><div className="panel-head"><div><span className="eyebrow">{t('A GOOD WAY TO SEE A TREND')}</span><h2>{t('Production, sold & waste')}</h2></div><span className="chart-legend"><i className="legend-produced" /> {t('Produced')} <i className="legend-sold" /> {t('Sold')} <i className="legend-waste" /> {t('Waste')}</span></div>
         {busy ? <LoadingState label="Building your report…" /> : !totalProduced && !totalWaste && !totalSold ? <EmptyState title="Your chart will grow here" detail="A few days of records make trends easier to spot." /> : <div className="bar-chart" role="img" aria-label="Production, inferred sales and waste across the selected date range">{daily.map((day) => <div className="bar-day" key={day.start} title={`${formatDate(day.start)}${day.start === day.end ? '' : ` – ${formatDate(day.end)}`}: ${day.produced} produced, ${day.sold} inferred sold, ${day.waste} waste`}><div className="bar-pair"><span className="bar bar-produced" style={{ height: `${Math.max(3, day.produced / maxQuantity * 100)}%` }} /><span className="bar bar-sold" style={{ height: `${Math.max(3, day.sold / maxQuantity * 100)}%` }} /><span className="bar bar-waste" style={{ height: `${Math.max(3, day.waste / maxQuantity * 100)}%` }} /></div><small>{day.end.slice(-2)}</small></div>)}</div>}
         <div className="chart-caption"><span>{t('BOXES PER DAY')}</span><span>{formatDate(start)} – {formatDate(end)}</span></div>
       </section>
-      <section className="panel report-chart-panel"><div className="panel-head"><div><span className="eyebrow">{t('SPENDING TREND')}</span><h2>{t('Expenses over time')}</h2></div></div>
+      {canViewExpenses && <section className="panel report-chart-panel"><div className="panel-head"><div><span className="eyebrow">{t('SPENDING TREND')}</span><h2>{t('Expenses over time')}</h2></div></div>
         {busy ? <LoadingState label="Gathering expenses…" /> : !totalExpenses ? <EmptyState title="No expenses in this range" detail="Choose another date range or add a purchase." /> : <div className="bar-chart expense-trend-chart" role="img" aria-label="Expenses across the selected date range">{daily.map((day) => <div className="bar-day" key={day.start} title={`${formatDate(day.start)}${day.start === day.end ? '' : ` – ${formatDate(day.end)}`}: ${formatBaht(day.expenses)}`}><div className="bar-pair"><span className="bar bar-expense" style={{ height: `${Math.max(day.expenses ? 3 : 0, day.expenses / maxExpense * 100)}%` }} /></div><small>{day.end.slice(-2)}</small></div>)}</div>}
         <div className="chart-caption"><span>{t('THB BY PERIOD')}</span><span>{formatDate(start)} – {formatDate(end)}</span></div>
-      </section>
+      </section>}
     </div>
 
     <section className="panel report-table-panel"><div className="panel-head"><div><span className="eyebrow">{t('MENU AND MEAT BREAKDOWN')}</span><h2>{t('Where each box went')}</h2><p>{t('Waste rate is waste divided by production for the selected menu and meat option.')}</p></div><span className="count-chip">{variantSummary.length} {t('menu variants')}</span></div>
       {busy ? <LoadingState label="Building your report…" /> : variantSummary.length === 0 ? <EmptyState title="No food records in this range" detail="Try a different date range or clear some filters." /> : <div className="report-table-wrap"><table className="report-data-table"><thead><tr><th>{t('Menu / meat')}</th><th>{t('Produced')}</th><th>{t('Sold')}</th><th>{t('Waste')}</th><th>{t('Waste %')}</th><th>{t('Current stock')}</th></tr></thead><tbody>{variantSummary.map((row) => <tr key={row.label}><th scope="row">{row.label}</th><td>{formatQuantity(row.produced)}</td><td>{formatQuantity(row.sold)}</td><td>{formatQuantity(row.waste)}</td><td>{row.wasteRate === null ? '—' : `${Math.round(row.wasteRate)}%`}</td><td>{formatQuantity(row.currentStock)}</td></tr>)}</tbody></table></div>}
     </section>
 
-    <div className="report-grid report-breakdown-grid">
+    <div className={`report-grid report-breakdown-grid${canViewExpenses ? '' : ' report-breakdown-grid-single'}`}>
       <section className="panel expense-breakdown"><div className="panel-head"><div><span className="eyebrow">{t('WHY FOOD WAS LOST')}</span><h2>{t('Waste by reason')}</h2></div></div>
         {busy ? <LoadingState label="Gathering waste reasons…" /> : reasonTotals.length === 0 ? <EmptyState title="No waste in this range" detail="Waste quantity by reason will appear here." /> : <div className="store-breakdown">{reasonTotals.map(([reason, quantity], index) => <div className="store-bar-row" key={reason}><div><span>{t(reason)}</span><strong>{formatQuantity(quantity)} {t('boxes')}</strong></div><span className={`store-bar-line store-bar-${index % 4}`}><i style={{ width: `${quantity / (reasonTotals[0]?.[1] || 1) * 100}%` }} /></span></div>)}</div>}
       </section>
-      <section className="panel expense-breakdown"><div className="panel-head"><div><span className="eyebrow">{t('WHERE IT WENT')}</span><h2>{t('Expense by store')}</h2></div></div>
+      {canViewExpenses && <section className="panel expense-breakdown"><div className="panel-head"><div><span className="eyebrow">{t('WHERE IT WENT')}</span><h2>{t('Expense by store')}</h2></div></div>
         {busy ? <LoadingState label="Gathering expenses…" /> : storeTotals.length === 0 ? <EmptyState title="No expenses in this range" detail="Choose another date range or add a purchase." /> : <div className="store-breakdown">{storeTotals.map(([store, amount], index) => <div className="store-bar-row" key={store}><div><span>{store}</span><strong>{formatBaht(amount)}</strong></div><span className={`store-bar-line store-bar-${index % 4}`}><i style={{ width: `${amount / (storeTotals[0]?.[1] || 1) * 100}%` }} /></span></div>)}</div>}
-      </section>
-      <section className="panel expense-breakdown"><div className="panel-head"><div><span className="eyebrow">{t('PURCHASE TYPES')}</span><h2>{t('Expense by category')}</h2></div></div>
+      </section>}
+      {canViewExpenses && <section className="panel expense-breakdown"><div className="panel-head"><div><span className="eyebrow">{t('PURCHASE TYPES')}</span><h2>{t('Expense by category')}</h2></div></div>
         {busy ? <LoadingState label="Gathering expense categories…" /> : categoryTotals.length === 0 ? <EmptyState title="No expenses in this range" detail="Choose another date range or add a purchase." /> : <div className="store-breakdown">{categoryTotals.map(([category, amount], index) => <div className="store-bar-row" key={category}><div><span>{t(category)}</span><strong>{formatBaht(amount)}</strong></div><span className={`store-bar-line store-bar-${index % 4}`}><i style={{ width: `${amount / (categoryTotals[0]?.[1] || 1) * 100}%` }} /></span></div>)}</div>}
-      </section>
+      </section>}
     </div>
 
     <div className="report-grid report-record-grid">
@@ -351,12 +353,18 @@ export function ReportsPage() {
           {filteredWaste.length > REPORT_DETAIL_LIMIT && <p className="report-list-limit">{t('Showing the latest')} {REPORT_DETAIL_LIMIT} {t('of')} {filteredWaste.length} {t('records')}.</p>}
         </>}
       </section>
-      <section className="panel report-record-panel"><div className="panel-head"><div><span className="eyebrow">{t('PURCHASE DETAILS')}</span><h2>{t('Expense records')}</h2><p>{t('Open a purchase to see its notes and private receipt photos.')}</p></div><span className="count-chip">{filteredExpenses.length}</span></div>
+      <section className="panel report-record-panel"><div className="panel-head"><div><span className="eyebrow">{t('AFTER-CLOSE REMOVALS')}</span><h2>{t('Food taken after closing')}</h2><p>{t('See which menu was removed, the reason and the staff note.')}</p></div><span className="count-chip">{filteredStockOuts.length}</span></div>
+        {busy ? <LoadingState label="Gathering after-close removals…" /> : filteredStockOuts.length === 0 ? <EmptyState title="No food taken after closing in this period" detail="A menu, reason and note will appear here when a late removal is recorded." /> : <>
+          <div className="report-record-list">{filteredStockOuts.slice(0, REPORT_DETAIL_LIMIT).map((row) => <details className="report-source-record" key={row.id}><summary><span className="report-source-icon report-source-stock-out"><PackageOpen size={16} /></span><span className="report-source-main"><strong>{formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name)}</strong><small>{formatDate(row.removal_date)} · {t('Taken by / reason')}: {t(row.reason)} · {row.production_batches?.production_date ? `${t('Batch made')} ${formatDate(row.production_batches.production_date)}` : t('date unavailable')}</small></span><strong className="report-source-quantity">−{formatQuantity(Number(row.quantity))} {t('boxes')}</strong></summary><div className="report-source-detail">{row.notes ? <p>{row.notes}</p> : <small>{t('No additional note')}</small>}</div></details>)}</div>
+          {filteredStockOuts.length > REPORT_DETAIL_LIMIT && <p className="report-list-limit">{t('Showing the latest')} {REPORT_DETAIL_LIMIT} {t('of')} {filteredStockOuts.length} {t('records')}.</p>}
+        </>}
+      </section>
+      {canViewExpenses && <section className="panel report-record-panel"><div className="panel-head"><div><span className="eyebrow">{t('PURCHASE DETAILS')}</span><h2>{t('Expense records')}</h2><p>{t('Open a purchase to see its notes and private receipt photos.')}</p></div><span className="count-chip">{filteredExpenses.length}</span></div>
         {busy ? <LoadingState label="Gathering expense records…" /> : filteredExpenses.length === 0 ? <EmptyState title="No expenses in this range" detail="Expense details will appear here when purchases are recorded." /> : <>
           <div className="report-record-list">{filteredExpenses.slice(0, REPORT_DETAIL_LIMIT).map((row) => <details className="report-source-record" key={row.id}><summary><span className="report-source-icon report-source-expense"><ReceiptText size={16} /></span><span className="report-source-main"><strong>{row.expense_categories?.name ?? 'Other'} · {row.stores?.name ?? 'Other'}</strong><small>{formatDate(row.expense_date)}{row.notes ? ` · ${row.notes}` : ''}</small></span><strong className="report-source-quantity">{formatBaht(row.amount_thb)}</strong></summary><div className="report-source-detail">{row.notes && <p>{row.notes}</p>}{row.photoUrls.length > 0 ? <div className="report-photo-strip">{row.photoUrls.map((url) => <a href={url} key={url} target="_blank" rel="noreferrer"><img src={url} alt={`${t('Receipt photo')} · ${row.expense_categories?.name ?? ''}`} loading="lazy" /></a>)}</div> : <small className="report-no-photo"><ImageIcon size={14} /> {t('No receipt photo attached')}</small>}</div></details>)}</div>
           {filteredExpenses.length > REPORT_DETAIL_LIMIT && <p className="report-list-limit">{t('Showing the latest')} {REPORT_DETAIL_LIMIT} {t('of')} {filteredExpenses.length} {t('records')}.</p>}
         </>}
-      </section>
+      </section>}
     </div>
 
     <section className="panel exports-panel"><div className="panel-head"><div><span className="eyebrow">{t('YOUR RECORDS, YOURS TO KEEP')}</span><h2>{t('Download a CSV')}</h2></div><ArrowDownToLine className="panel-sparkle" size={18} /></div><div className="export-grid">{visibleExports.map(({ label, icon: Icon, rows }) => <button key={label} className="export-card" disabled={!rows.length || busy} onClick={() => downloadCsv(`canteen-${label.toLowerCase()}-${start}-to-${end}.csv`, rows)}><span className="export-card-icon"><Icon size={18} /></span><span><strong>{t(label)}</strong><small>{rows.length} {t('rows available')}</small></span><ArrowDownToLine size={16} /></button>)}</div></section>

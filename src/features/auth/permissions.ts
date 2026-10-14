@@ -9,13 +9,13 @@ export const roleLabels: Record<AppRole, string> = {
 };
 
 const routeRoles: Record<string, readonly AppRole[]> = {
-  '/': ['admin', 'manager', 'front', 'kitchen', 'auditor'],
+  '/': ['admin', 'manager', 'front', 'auditor'],
   '/production': ['admin', 'front', 'auditor'],
   '/menus': ['admin', 'front', 'auditor'],
   '/stock': ['admin', 'front', 'auditor'],
   '/waste': ['admin', 'front', 'auditor'],
   '/closing': ['admin', 'front', 'auditor'],
-  '/expenses': ['admin', 'front', 'kitchen', 'auditor'],
+  '/expenses': ['admin', 'kitchen'],
   '/reports': ['admin', 'manager', 'auditor'],
   '/manage': ['admin', 'auditor'],
   '/activity': ['admin', 'auditor'],
@@ -34,6 +34,6 @@ export function canViewAdminWorkflow(role: AppRole | null | undefined): boolean 
 }
 
 export function homePathForRole(role: AppRole): string {
-  void role;
+  if (role === 'kitchen') return '/expenses';
   return '/';
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Archive, PackageOpen, RotateCcw, Trash2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { EmptyState, LoadingState, Notice } from '../../components/Feedback';
@@ -9,10 +9,11 @@ import { formatBusinessDate, businessDateNow } from '../../lib/dates';
 import { formatFoodVariant, formatQuantity } from '../../lib/format';
 import { attachPrivatePhotos, signPrivatePhotos } from '../../lib/photoAttachments';
 import { requireSupabase } from '../../lib/supabase';
-import { useLocalDraft } from '../../lib/localDrafts';
+import { readLocalDraft, useLocalDraft } from '../../lib/localDrafts';
 import { useAuth } from '../auth/AuthContext';
 import { isReadOnlyDemo } from '../auth/permissions';
 import { useI18n } from '../../lib/i18n';
+import { getStockRecordMode, type StockRecordMode } from './workflow';
 
 interface StockRow { id: string; menu_id: string | null; menu_name: string; production_date: string; expiry_date: string; quantity_remaining: number; }
 interface Reason { id: string; name: string; active: boolean; }
@@ -20,8 +21,23 @@ interface BatchName { menu_name_snapshot: string; meat_options: { name: string }
 interface WasteRow { id: string; quantity: number; reason: string; notes: string | null; waste_date: string; photo_url: string | null; deleted_at: string | null; waste_record_photos?: { file_path: string }[]; photoUrls?: string[]; production_batches: BatchName | null; }
 interface StockOutRow { id: string; quantity: number; reason: string; notes: string | null; removal_date: string; deleted_at: string | null; production_batches: BatchName | null; }
 
-type RecordMode = 'waste' | 'stock-out';
+type RecordMode = StockRecordMode;
+type CurrentDayStatus = 'open' | 'closed' | 'unknown';
 interface WasteFormDraft { batchId: string; quantity: string; reason: string; notes: string; removalDate: string; }
+
+async function readClosingSnapshot(businessDate: string): Promise<{ currentStatus: CurrentDayStatus; latestClosedDate: string | null; error: string }> {
+  const db = requireSupabase();
+  const [currentResult, latestResult] = await Promise.all([
+    db.from('daily_closings').select('status, version').eq('business_date', businessDate).order('version', { ascending: false }).limit(1).maybeSingle(),
+    db.from('daily_closings').select('business_date').eq('status', 'closed').order('business_date', { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const error = currentResult.error?.message ?? latestResult.error?.message ?? '';
+  return {
+    currentStatus: error ? 'unknown' : currentResult.data?.status === 'closed' ? 'closed' : 'open',
+    latestClosedDate: latestResult.data?.business_date ?? null,
+    error,
+  };
+}
 
 function isWasteFormDraft(value: unknown): value is WasteFormDraft {
   if (!value || typeof value !== 'object') return false;
@@ -36,7 +52,9 @@ export function WastePage({ embedded = false }: { embedded?: boolean }) {
   const isAuditor = isReadOnlyDemo(member?.role);
   const showWriteControls = canEdit || isAuditor;
   const [params] = useSearchParams();
-  const [mode, setMode] = useState<RecordMode>('waste');
+  const [historyMode, setHistoryMode] = useState<RecordMode>('waste');
+  const [currentBusinessDate, setCurrentBusinessDate] = useState(businessDateNow());
+  const [currentDayStatus, setCurrentDayStatus] = useState<CurrentDayStatus>('unknown');
   const [stock, setStock] = useState<StockRow[]>([]);
   const [waste, setWaste] = useState<WasteRow[]>([]);
   const [stockOuts, setStockOuts] = useState<StockOutRow[]>([]);
@@ -53,54 +71,123 @@ export function WastePage({ embedded = false }: { embedded?: boolean }) {
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [statusError, setStatusError] = useState('');
   const [success, setSuccess] = useState('');
+  const mode: RecordMode = canEdit
+    ? getStockRecordMode(currentDayStatus === 'closed' ? 'closed' : null)
+    : historyMode;
   const draftKey = `canteen.draft.waste:${member?.user_id ?? 'local'}:${mode}`;
   const { status: draftStatus, clearDraft } = useLocalDraft<WasteFormDraft>(draftKey, { batchId, quantity, reason, notes, removalDate }, (stored) => {
-    if (!isWasteFormDraft(stored)) return;
+    if (!isWasteFormDraft(stored) || stored.removalDate !== currentBusinessDate) return;
     if (!params.get('batch')) setBatchId(stored.batchId);
     setQuantity(stored.quantity); setReason(stored.reason); setNotes(stored.notes); setRemovalDate(stored.removalDate);
   }, (value) => Boolean(value.quantity.trim() || value.notes.trim()));
 
   async function load() {
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setStatusError('');
     const db = requireSupabase();
-    const [stockResult, wasteResult, wasteReasonResult, stockOutReasonResult, stockOutResult, closingResult] = await Promise.all([
+    const [stockResult, wasteResult, wasteReasonResult, stockOutReasonResult, stockOutResult, closingSnapshot] = await Promise.all([
       db.from('v_stock_by_batch').select('id, menu_id, menu_name, production_date, expiry_date, quantity_remaining').gt('quantity_remaining', 0).order('expiry_date'),
       db.from('waste_records').select('id, quantity, reason, notes, waste_date, photo_url, deleted_at, production_batches(menu_name_snapshot, meat_options(name), production_date), waste_record_photos(file_path)').order('waste_date', { ascending: false }).limit(60),
       db.from('waste_reasons').select('id, name, active').eq('active', true).order('name'),
       db.from('stock_out_reasons').select('id, name, active').eq('active', true).order('name'),
       db.from('post_close_stock_outs').select('id, quantity, reason, notes, removal_date, deleted_at, production_batches(menu_name_snapshot, meat_options(name), production_date)').order('removal_date', { ascending: false }).limit(60),
-      db.from('daily_closings').select('business_date').eq('status', 'closed').order('business_date', { ascending: false }).limit(1).maybeSingle(),
+      readClosingSnapshot(currentBusinessDate),
     ]);
-    const firstError = [stockResult, wasteResult, wasteReasonResult, stockOutReasonResult, stockOutResult, closingResult].find((result) => result.error)?.error;
+    const firstError = [stockResult, wasteResult, wasteReasonResult, stockOutReasonResult, stockOutResult].find((result) => result.error)?.error;
     if (firstError) setError(firstError.message);
+    setStatusError(closingSnapshot.error);
     const available = (stockResult.data ?? []) as StockRow[];
     const records = (wasteResult.data ?? []) as unknown as WasteRow[];
     const pathsByRecord = records.map((record) => [...new Set([...(record.waste_record_photos ?? []).map((photo) => photo.file_path), ...(record.photo_url ? [record.photo_url] : [])])]);
     const signedUrls = await signPrivatePhotos(db, pathsByRecord.flat());
-    const latestDate = closingResult.data?.business_date ?? null;
     setStock(available);
     setWaste(records.map((record, index) => ({ ...record, photoUrls: pathsByRecord[index]!.map((path) => signedUrls[path]).filter(Boolean) })));
     setWasteReasons((wasteReasonResult.data ?? []) as Reason[]);
     setStockOutReasons((stockOutReasonResult.data ?? []) as Reason[]);
     setStockOuts((stockOutResult.data ?? []) as unknown as StockOutRow[]);
-    setLatestClosedDate(latestDate);
-    setRemovalDate((current) => latestDate && current < latestDate ? latestDate : current);
+    setLatestClosedDate(closingSnapshot.latestClosedDate);
+    setCurrentDayStatus(closingSnapshot.currentStatus);
+    setRemovalDate((current) => closingSnapshot.latestClosedDate && current < closingSnapshot.latestClosedDate ? closingSnapshot.latestClosedDate : current);
     setBatchId((current) => available.some((row) => row.id === current) ? current : available[0]?.id ?? '');
-    setReason((current) => mode === 'waste'
-      ? (wasteReasonResult.data ?? []).some((option) => option.name === current) ? current : wasteReasonResult.data?.[0]?.name ?? ''
-      : (stockOutReasonResult.data ?? []).some((option) => option.name === current) ? current : stockOutReasonResult.data?.[0]?.name ?? '');
     setBusy(false);
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [currentBusinessDate]);
+
+  useEffect(() => {
+    let active = true;
+    const refreshDayStatus = async () => {
+      if (document.visibilityState === 'hidden') return;
+      const date = businessDateNow();
+      setCurrentBusinessDate(date);
+      const snapshot = await readClosingSnapshot(date);
+      if (!active) return;
+      setCurrentDayStatus(snapshot.currentStatus);
+      setLatestClosedDate(snapshot.latestClosedDate);
+      setStatusError(snapshot.error);
+    };
+    const onVisibilityChange = () => { if (!document.hidden) void refreshDayStatus(); };
+    const timer = window.setInterval(() => { void refreshDayStatus(); }, 30_000);
+    window.addEventListener('focus', refreshDayStatus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshDayStatus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 
   const selectedBatch = stock.find((row) => row.id === batchId);
   const activeReasons = mode === 'waste' ? wasteReasons : stockOutReasons;
   const selectedReasonIsOther = reason.trim().toLowerCase() === 'other';
+  const previousMode = useRef(mode);
+  const previousBusinessDate = useRef(currentBusinessDate);
+
+  useEffect(() => {
+    if (previousBusinessDate.current === currentBusinessDate) return;
+    previousBusinessDate.current = currentBusinessDate;
+    setQuantity('');
+    setNotes('');
+    setPhotos([]);
+    setRemovalDate(currentBusinessDate);
+    setShowArchived(false);
+  }, [currentBusinessDate]);
+
+  useEffect(() => {
+    if (previousMode.current === mode) return;
+    previousMode.current = mode;
+    setShowArchived(false);
+    setPhotos([]);
+    const savedDraft = readLocalDraft<unknown>(draftKey);
+    if (isWasteFormDraft(savedDraft) && savedDraft.removalDate === currentBusinessDate) {
+      if (!params.get('batch')) setBatchId(savedDraft.batchId);
+      setQuantity(savedDraft.quantity);
+      setReason(savedDraft.reason);
+      setNotes(savedDraft.notes);
+      setRemovalDate(savedDraft.removalDate);
+      return;
+    }
+    setQuantity('');
+    setNotes('');
+    setReason(activeReasons[0]?.name ?? '');
+  }, [mode, draftKey, currentBusinessDate, activeReasons, params]);
+
+  useEffect(() => {
+    if (activeReasons.length && !activeReasons.some((item) => item.name === reason)) setReason(activeReasons[0]!.name);
+  }, [mode, activeReasons, reason]);
+
+  useEffect(() => {
+    if (currentDayStatus === 'closed') setRemovalDate(currentBusinessDate);
+  }, [currentDayStatus, currentBusinessDate]);
 
   async function recordWaste(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(''); setSuccess(''); setSaving(true);
     if (!canEdit) { setSaving(false); return; }
+    if (currentDayStatus !== 'open' || mode !== 'waste') {
+      setError(currentDayStatus === 'unknown' ? t('Could not confirm whether today has been closed. Refresh and try again.') : t('This day is closed. Record a post-close removal instead.'));
+      setSaving(false); return;
+    }
     const db = requireSupabase();
     const { data, error: insertError } = await db.from('waste_records').insert({
       production_batch_id: batchId, quantity: Number(quantity), reason, notes: notes.trim() || null,
@@ -118,6 +205,10 @@ export function WastePage({ embedded = false }: { embedded?: boolean }) {
   async function recordStockOut(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(''); setSuccess(''); setSaving(true);
     if (!canEdit) { setSaving(false); return; }
+    if (currentDayStatus !== 'closed' || mode !== 'stock-out') {
+      setError(currentDayStatus === 'unknown' ? t('Could not confirm whether today has been closed. Refresh and try again.') : t('Close this day before recording a post-close removal.'));
+      setSaving(false); return;
+    }
     const { error: insertError } = await requireSupabase().from('post_close_stock_outs').insert({
       production_batch_id: batchId, quantity: Number(quantity), reason, notes: notes.trim() || null, removal_date: removalDate,
     });
@@ -146,17 +237,39 @@ export function WastePage({ embedded = false }: { embedded?: boolean }) {
 
   return <>
     {!embedded && <PageTitle eyebrow="ACCOUNT FOR EVERY BOX" title="Waste & stock out" detail={canEdit ? 'Record food that was discarded as Waste, or record food taken from stock after the day was closed.' : isAuditor ? t('View-only demo: changes are disabled.') : 'Review waste and after-close stock removal records. This account cannot change them.'} />}
-    {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
-    <div className="record-mode-tabs" role="tablist" aria-label={t('Choose a stock record type')}>
-      <button type="button" role="tab" aria-selected={mode === 'waste'} className={mode === 'waste' ? 'active' : ''} onClick={() => { setMode('waste'); setReason(wasteReasons[0]?.name ?? ''); setQuantity(''); setNotes(''); setShowArchived(false); }}><Trash2 size={17} />{t('Food discarded')} <small>{t('Counts as waste')}</small></button>
-      <button type="button" role="tab" aria-selected={mode === 'stock-out'} className={mode === 'stock-out' ? 'active' : ''} onClick={() => { setMode('stock-out'); setReason(stockOutReasons[0]?.name ?? ''); setQuantity(''); setNotes(''); setShowArchived(false); }}><PackageOpen size={17} />{t('Taken after closing')} <small>{t('Stock out, not waste')}</small></button>
-    </div>
+    {error && <Notice>{error}</Notice>}{statusError && <Notice>{statusError}</Notice>}{success && <Notice tone="success">{success}</Notice>}
+    {canEdit ? <section className={`record-day-status ${currentDayStatus}`} aria-live="polite">
+      <span className="record-day-status-icon">{mode === 'stock-out' ? <PackageOpen size={20} /> : <Trash2 size={20} />}</span>
+      <div className="record-day-status-copy">
+        <span className="eyebrow">{t(currentDayStatus === 'closed' ? 'DAY CLOSED' : currentDayStatus === 'open' ? 'DAY OPEN' : 'CHECKING DAY STATUS')}</span>
+        <h2>{t(mode === 'waste' ? 'Food discarded' : 'Taken after closing')}</h2>
+        <p>{t(currentDayStatus === 'closed' ? 'This day is closed. Record food taken out here.' : currentDayStatus === 'open' ? 'Record discarded food during the open day.' : 'Checking the day status before allowing a stock change.')}</p>
+      </div>
+      <span className="record-day-date">{formatBusinessDate(currentBusinessDate)}</span>
+    </section> : <section className="record-mode-selector" aria-labelledby="record-mode-title">
+      <div className="record-mode-heading">
+        <span className="eyebrow">{t('RECORD HISTORY')}</span>
+        <h2 id="record-mode-title">{t('Choose a record type to review.')}</h2>
+      </div>
+      <div className="record-mode-options" role="group" aria-label={t('Choose a stock record type')}>
+        <button type="button" aria-pressed={mode === 'waste'} className={`record-mode-option waste${mode === 'waste' ? ' active' : ''}`} onClick={() => { setHistoryMode('waste'); setShowArchived(false); }}>
+          <span className="record-mode-icon"><Trash2 size={20} /></span>
+          <span className="record-mode-copy"><strong>{t('Food discarded')}</strong><small>{t('Waste history')}</small><span className="record-mode-impact">{t('Counts as waste')}</span></span>
+          <span className="record-mode-check" aria-hidden="true">{mode === 'waste' ? '✓' : ''}</span>
+        </button>
+        <button type="button" aria-pressed={mode === 'stock-out'} className={`record-mode-option stock-out${mode === 'stock-out' ? ' active' : ''}`} onClick={() => { setHistoryMode('stock-out'); setShowArchived(false); }}>
+          <span className="record-mode-icon"><PackageOpen size={20} /></span>
+          <span className="record-mode-copy"><strong>{t('Taken after closing')}</strong><small>{t('After-close removals')}</small><span className="record-mode-impact">{t('Stock out, not waste')}</span></span>
+          <span className="record-mode-check" aria-hidden="true">{mode === 'stock-out' ? '✓' : ''}</span>
+        </button>
+      </div>
+    </section>}
     <div className="workflow-grid two-panel-grid">
       {showWriteControls && <section className="panel workflow-form-panel"><div className="panel-head"><div><span className="eyebrow">{t(mode === 'waste' ? 'CONFIRM WHAT WAS DISCARDED' : 'RECORD FOOD LEAVING STOCK')}</span><h2>{t(mode === 'waste' ? 'What went to waste?' : 'What was taken after closing?')}</h2></div><span className={`form-panel-icon ${mode === 'waste' ? 'peach' : 'green'}`}>{mode === 'waste' ? <Trash2 size={20} /> : <PackageOpen size={20} />}</span></div>
-        {busy ? <LoadingState label="Checking available batches…" /> : stock.length === 0 ? <EmptyState title="No stock to record against" detail="Once food has been produced, you can record a batch-specific stock change here." /> : mode === 'stock-out' && !latestClosedDate ? <EmptyState title="Close a day first" detail="After the first daily closing, staff can record food taken from stock without changing that closing count." /> : <form className="data-form" onSubmit={mode === 'waste' ? recordWaste : recordStockOut}>
+        {busy ? <LoadingState label="Checking available batches…" /> : canEdit && currentDayStatus === 'unknown' ? <EmptyState title={t('Could not confirm day status')} detail={t('Reconnect and refresh before recording a stock change.')} /> : stock.length === 0 ? <EmptyState title="No stock to record against" detail="Once food has been produced, you can record a batch-specific stock change here." /> : mode === 'stock-out' && !latestClosedDate ? <EmptyState title="Close a day first" detail="After the first daily closing, staff can record food taken from stock without changing that closing count." /> : <form className="data-form" onSubmit={mode === 'waste' ? recordWaste : recordStockOut}>
           <label>{t('Food batch')}<select required value={batchId} disabled={!canEdit} onChange={(event) => setBatchId(event.target.value)}>{stock.map((row) => <option key={row.id} value={row.id}>{row.menu_name} · {formatBusinessDate(row.production_date)} · {row.quantity_remaining} {t('left')}</option>)}</select></label>
           <div className="form-two-cols"><label>{t(mode === 'waste' ? 'Boxes discarded' : 'Boxes taken')}<input required type="number" min="1" max={selectedBatch?.quantity_remaining ?? 1} step="1" inputMode="numeric" placeholder={t('e.g. 2')} value={quantity} disabled={!canEdit} onChange={(event) => setQuantity(event.target.value)} /><small className="field-help">{t('Available in this batch:')} {formatQuantity(selectedBatch?.quantity_remaining ?? 0)} {t('boxes')}</small></label><label>{t('Reason')}<select required value={reason} disabled={!canEdit} onChange={(event) => setReason(event.target.value)}>{activeReasons.map((item) => <option key={item.id} value={item.name}>{t(item.name)}</option>)}</select></label></div>
-          {mode === 'stock-out' && <label>{t('Date removed')}<input type="date" required min={latestClosedDate ?? undefined} max={businessDateNow()} value={removalDate} disabled={!canEdit} onChange={(event) => setRemovalDate(event.target.value)} /><small className="field-help">{t('Use today for a late pickup today. Earlier dates than the latest closing are blocked to protect completed counts.')}</small></label>}
+          {mode === 'stock-out' && <label>{t('Date removed')}<input type="date" required min={latestClosedDate ?? undefined} max={currentBusinessDate} value={removalDate} disabled={!canEdit} onChange={(event) => setRemovalDate(event.target.value)} /><small className="field-help">{t('Use today for a late pickup today. Earlier dates than the latest closing are blocked to protect completed counts.')}</small></label>}
           <label>{t('Note')} {selectedReasonIsOther ? <span className="required-label">{t('REQUIRED FOR OTHER')}</span> : <span className="optional-label">{t('OPTIONAL')}</span>}<textarea rows={2} required={selectedReasonIsOther} placeholder={t(mode === 'waste' ? 'Add context if it would help the next shift' : 'For example, owner’s friend picked up a meal box')} value={notes} disabled={!canEdit} onChange={(event) => setNotes(event.target.value)} /></label>
           {mode === 'waste' && <PhotoAttachmentsPicker files={photos} onChange={setPhotos} disabled={!canEdit} label={photos.length ? `${photos.length} ${t('photos selected')}` : t('Add photos')} hint={t('Optional · private · compressed before upload')} />}
           {canEdit && <DraftStatus status={draftStatus} photosNotSaved={mode === 'waste'} />}
