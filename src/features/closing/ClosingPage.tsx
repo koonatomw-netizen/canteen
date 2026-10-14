@@ -6,6 +6,7 @@ import { DraftStatus } from '../../components/DraftStatus';
 import { businessDateNow, formatBusinessDate } from '../../lib/dates';
 import { formatFoodVariant, formatQuantity } from '../../lib/format';
 import { readLocalDraft, removeLocalDraft, writeLocalDraft, type DraftSaveStatus } from '../../lib/localDrafts';
+import { readAll } from '../../lib/pagination';
 import { calculateClosing, getBatchBalance, type ClosingResult } from '../../lib/stock';
 import { requireSupabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
@@ -28,7 +29,13 @@ function isClosingDraft(value: unknown): value is ClosingDraft {
     && typeof draft.note === 'string');
 }
 
+// Stored and sent in English (the database checks these exact values); only the label is translated.
 const adjustmentReasons = ['Counting correction', 'Staff meal', 'Complimentary', 'Missing/unrecorded', 'Other'];
+
+// Drafts saved before this fix could hold a translated label; drop it so staff pick again.
+function validDraftReason(reason: string | undefined): string {
+  return reason && adjustmentReasons.includes(reason) ? reason : '';
+}
 
 export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
   const { member } = useAuth();
@@ -57,10 +64,10 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
     setBusy(true); setError('');
     const db = requireSupabase();
     const [stockResult, closingResult] = await Promise.all([
-      db.from('production_batches').select('id, menu_name_snapshot, meat_option_id, meat_options(name), stock_movements!inner(business_date, quantity_delta)').lte('production_date', businessDate).lte('stock_movements.business_date', businessDate).is('deleted_at', null),
+      readAll<BatchRow>((from, to) => db.from('production_batches').select('id, menu_name_snapshot, meat_option_id, meat_options(name), stock_movements!inner(business_date, quantity_delta)').lte('production_date', businessDate).lte('stock_movements.business_date', businessDate).is('deleted_at', null).order('id').range(from, to)),
       db.from('daily_closings').select('id, version, status, closed_at, note, reopen_reason, closing_batch_counts(production_batch_id, expected_quantity, physical_remaining_quantity, calculated_sold_quantity, stock_adjustment_quantity, adjustment_reason)').eq('business_date', businessDate).order('version', { ascending: false }).limit(1).maybeSingle(),
     ]);
-    if (stockResult.error || closingResult.error) setError(stockResult.error?.message ?? closingResult.error?.message ?? 'Could not load the closing count.');
+    if (stockResult.error || closingResult.error) setError(stockResult.error ?? closingResult.error?.message ?? 'Could not load the closing count.');
     const latest = (closingResult.data as unknown as Closing | null) ?? null;
     const savedDraft = latest?.status === 'closed' || isAuditor ? null : readLocalDraft<unknown>(draftKey);
     const draft = isClosingDraft(savedDraft) ? savedDraft : null;
@@ -68,7 +75,7 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
       ? new Map((latest.closing_batch_counts ?? []).map((row) => [row.production_batch_id, row]))
       : new Map<string, Count>();
     const variants = new Map<string, ClosingVariant>();
-    for (const batch of (stockResult.data ?? []) as unknown as BatchRow[]) {
+    for (const batch of stockResult.data) {
       const recorded = recordedCounts.get(batch.id);
       if (latest?.status === 'closed' && !recorded) continue;
       const quantityAvailable = recorded?.expected_quantity ?? getBatchBalance(batch.stock_movements, businessDate);
@@ -112,7 +119,7 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
     setStock(variantRows);
     setClosing(latest);
     setCounts(Object.fromEntries(variantRows.map((variant) => [variant.key, variant.recorded ? String(variant.recorded.physical) : draft?.counts[variant.key] ?? ''])));
-    setReasons(Object.fromEntries(variantRows.map((variant) => [variant.key, variant.adjustment_reason ?? draft?.reasons[variant.key] ?? ''])));
+    setReasons(Object.fromEntries(variantRows.map((variant) => [variant.key, variant.adjustment_reason ?? validDraftReason(draft?.reasons[variant.key])])));
     setSelectedMenuKey(null);
     setNote(latest?.note ?? draft?.note ?? '');
     setFormLoadedDate(businessDate);
@@ -261,7 +268,7 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
             <div className="closing-quantity-cell"><small>{t('AVAILABLE')}</small><strong>{formatQuantity(variant.quantity_available)}</strong><span>{t('boxes')}</span></div>
             <label className="closing-count-label"><span>{t('LEFT AT CLOSE')}</span><input aria-label={`${t('Boxes left for')} ${selectedMenu.name} ${variant.meat_name ?? t('option')}`} type="number" min="0" step="1" inputMode="numeric" value={counts[variant.key] ?? ''} onChange={(event) => setCounts((current) => ({ ...current, [variant.key]: event.target.value }))} disabled={!canEdit || alreadyClosed || saving} /><small>{t('boxes')}</small></label>
             <div className="closing-quantity-cell closing-sold-cell"><small>{t('SOLD')}</small><strong>{hasPhysicalCount ? formatQuantity(calculation?.sold ?? 0) : '—'}</strong><span>{t('boxes')}</span></div>
-            {calculation && calculation.adjustment > 0 && <div className="adjustment-inline"><AlertTriangle size={15} /><span>{t('Found')} {formatQuantity(calculation.adjustment)} {t('extra. Why?')}</span><select required aria-label={`${t('Reason for extra')} ${selectedMenu.name} ${variant.meat_name ?? t('option')} ${t('stock')}`} value={reasons[variant.key] ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [variant.key]: event.target.value }))} disabled={!canEdit || alreadyClosed || saving}><option value="">{t('Choose a reason')}</option>{adjustmentReasons.map((reason) => <option key={reason}>{t(reason)}</option>)}</select></div>}
+            {calculation && calculation.adjustment > 0 && <div className="adjustment-inline"><AlertTriangle size={15} /><span>{t('Found')} {formatQuantity(calculation.adjustment)} {t('extra. Why?')}</span><select required aria-label={`${t('Reason for extra')} ${selectedMenu.name} ${variant.meat_name ?? t('option')} ${t('stock')}`} value={reasons[variant.key] ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [variant.key]: event.target.value }))} disabled={!canEdit || alreadyClosed || saving}><option value="">{t('Choose a reason')}</option>{adjustmentReasons.map((reason) => <option key={reason} value={reason}>{t(reason)}</option>)}</select></div>}
           </article>;
         })}</div>
         <footer className="closing-modal-footer"><span>{selectedMenu.variants.filter((variant) => counts[variant.key] !== undefined && counts[variant.key] !== '').length} {t('of')} {selectedMenu.variants.length} {t('options counted')}</span><button type="button" className="button button-primary" onClick={() => setSelectedMenuKey(null)}>{t(alreadyClosed || isAuditor ? 'Done' : 'Save counts')}</button></footer>

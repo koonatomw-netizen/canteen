@@ -8,6 +8,7 @@ import { formatBaht, formatDate, formatFoodVariant, formatQuantity } from '../..
 import { downloadCsv } from '../../lib/csv';
 import { signPrivatePhotos } from '../../lib/photoAttachments';
 import { aggregateVariantSummary, matchesFoodFilters, previousDateRange, wasteRatePercent, type VariantQuantity } from '../../lib/reportAnalysis';
+import { readAll } from '../../lib/pagination';
 import { requireSupabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../../lib/i18n';
@@ -24,18 +25,6 @@ interface ClosingCount { production_batch_id: string; expected_quantity: number;
 interface DailyClosing { business_date: string; version: number; status: string; note: string | null; closing_batch_counts: ClosingCount[]; }
 interface ReportRows { production: Production[]; waste: Waste[]; closings: DailyClosing[]; expenses: Expense[]; }
 const REPORT_DETAIL_LIMIT = 100;
-const PAGE_SIZE = 1000;
-
-async function readAll<T>(page: (from: number, to: number) => PromiseLike<unknown>) {
-  const rows: T[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const result = await page(from, from + PAGE_SIZE - 1) as { data: T[] | null; error: { message: string } | null };
-    if (result.error) return { data: rows, error: result.error.message };
-    const pageRows = result.data ?? [];
-    rows.push(...pageRows);
-    if (pageRows.length < PAGE_SIZE) return { data: rows, error: null };
-  }
-}
 
 function latestClosingVersions(rows: DailyClosing[]) {
   const latest = new Map<string, DailyClosing>();

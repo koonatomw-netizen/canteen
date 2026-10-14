@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowRight, CalendarDays, Copy, PackagePlus, Plus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { addCalendarDays, businessDateNow } from '../../lib/dates';
@@ -51,6 +51,7 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
+  const copyingRef = useRef(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showMenuDialog, setShowMenuDialog] = useState(false);
@@ -106,19 +107,33 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
   }
 
   async function copyYesterday() {
-    if (!canEdit) return;
-    const yesterday = addCalendarDays(productionDate, -1);
-    setError(''); setSuccess('');
-    const { data, error: fetchError } = await requireSupabase().from('production_batches').select('menu_id, meat_option_id, quantity_produced').eq('production_date', yesterday).is('deleted_at', null);
-    if (fetchError) { setError(fetchError.message); return; }
-    const copied = (data ?? []).filter((row) => row.meat_option_id && menus.some((menu) => menu.id === row.menu_id) && meatOptions.some((meat) => meat.id === row.meat_option_id));
-    if (copied.length === 0) { setError(`${t('No production was recorded on')} ${formatDate(yesterday)}.`); return; }
-    const { error: saveError } = await requireSupabase().from('production_batches').insert(copied.map((row) => {
-      const menu = menus.find((item) => item.id === row.menu_id)!;
-      return { menu_id: row.menu_id, meat_option_id: row.meat_option_id!, production_date: productionDate, quantity_produced: row.quantity_produced, expiry_date: addCalendarDays(productionDate, menu.default_shelf_life_days) };
-    }));
-    if (saveError) setError(saveError.message);
-    else { setSuccess(`${t('Copied')} ${copied.length} ${t(copied.length === 1 ? 'menu row' : 'menu rows')} ${t('into new batches for')} ${formatDate(productionDate)}.`); await load(); }
+    // A ref, not state, so a fast double tap cannot start a second copy before re-render.
+    if (!canEdit || copyingRef.current) return;
+    copyingRef.current = true; setSaving(true);
+    try {
+      const db = requireSupabase();
+      const yesterday = addCalendarDays(productionDate, -1);
+      setError(''); setSuccess('');
+      const [yesterdayResult, targetDayResult] = await Promise.all([
+        db.from('production_batches').select('menu_id, meat_option_id, quantity_produced').eq('production_date', yesterday).is('deleted_at', null),
+        db.from('production_batches').select('menu_id, meat_option_id').eq('production_date', productionDate).is('deleted_at', null),
+      ]);
+      const fetchError = yesterdayResult.error ?? targetDayResult.error;
+      if (fetchError) { setError(fetchError.message); return; }
+      const copied = (yesterdayResult.data ?? []).filter((row) => row.meat_option_id && menus.some((menu) => menu.id === row.menu_id) && meatOptions.some((meat) => meat.id === row.meat_option_id));
+      if (copied.length === 0) { setError(`${t('No production was recorded on')} ${formatDate(yesterday)}.`); return; }
+      const alreadyRecorded = new Set((targetDayResult.data ?? []).map((row) => `${row.menu_id}:${row.meat_option_id}`));
+      const repeated = copied.filter((row) => alreadyRecorded.has(`${row.menu_id}:${row.meat_option_id}`)).length;
+      if (repeated > 0 && !window.confirm(`${repeated} ${t(repeated === 1 ? 'menu row' : 'menu rows')} ${t('already has production on')} ${formatDate(productionDate)}. ${t('Copy yesterday again and add more batches?')}`)) return;
+      const { error: saveError } = await db.from('production_batches').insert(copied.map((row) => {
+        const menu = menus.find((item) => item.id === row.menu_id)!;
+        return { menu_id: row.menu_id, meat_option_id: row.meat_option_id!, production_date: productionDate, quantity_produced: row.quantity_produced, expiry_date: addCalendarDays(productionDate, menu.default_shelf_life_days) };
+      }));
+      if (saveError) setError(saveError.message);
+      else { setSuccess(`${t('Copied')} ${copied.length} ${t(copied.length === 1 ? 'menu row' : 'menu rows')} ${t('into new batches for')} ${formatDate(productionDate)}.`); await load(); }
+    } finally {
+      copyingRef.current = false; setSaving(false);
+    }
   }
 
   return <>
@@ -132,7 +147,7 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
           <label>{t('Best before')}<input required type="date" min={productionDate} value={expiryDate} disabled={!canEdit} onChange={(event) => setExpiryDate(event.target.value)} /><small className="field-help">{t('Suggested from this menu’s shelf life. Change it if this batch needs a different date.')}</small></label>
           <label>{t('Note')} <span className="optional-label">{t('OPTIONAL')}</span><textarea rows={2} placeholder={t('Anything the next shift should know?')} value={notes} disabled={!canEdit} onChange={(event) => setNotes(event.target.value)} /></label>
           {canEdit && <DraftStatus status={draftStatus} />}
-          <div className="form-buttons"><button className="button button-primary" disabled={!canEdit || saving || !menuId || !meatOptionId}><Plus size={17} /> {saving ? t('Saving batch…') : t('Record production')}</button><button type="button" className="button button-quiet" onClick={() => void copyYesterday()} disabled={!canEdit || !menus.length || !meatOptions.length}><Copy size={16} /> {t('Copy yesterday')}</button></div>
+          <div className="form-buttons"><button className="button button-primary" disabled={!canEdit || saving || !menuId || !meatOptionId}><Plus size={17} /> {saving ? t('Saving batch…') : t('Record production')}</button><button type="button" className="button button-quiet" onClick={() => void copyYesterday()} disabled={!canEdit || saving || !menus.length || !meatOptions.length}><Copy size={16} /> {t('Copy yesterday')}</button></div>
           <p className="form-footnote"><span /> {t('Quantities are checked against stock before any future deduction.')}</p>
         </form>}
       </section>}

@@ -44,6 +44,15 @@ begin
   limit 1;
 
   if v_source_event_id is null then
+    -- A database built from migrations (local, CI, staging) never had the
+    -- pre-launch rows or the cleanup event, so there is nothing to reconcile.
+    -- A database that still holds pre-cutoff stock history must have the
+    -- approved event, so that case still stops without changing data.
+    if not exists (select 1 from public.production_batches where production_date < date '2026-10-13')
+       and not exists (select 1 from public.stock_movements where business_date < date '2026-10-13') then
+      raise notice 'No pre-launch stock history and no cleanup event; nothing to reconcile.';
+      return;
+    end if;
     raise exception 'The approved historical cleanup audit event is missing; no data was changed.';
   end if;
 
