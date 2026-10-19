@@ -1,6 +1,6 @@
 begin;
 set local search_path = extensions, public;
-select plan(24);
+select plan(25);
 
 select extensions.ok(not has_function_privilege('anon', 'public.remove_archived_waste_and_batch(uuid,text)', 'EXECUTE'), 'anonymous users cannot remove a batch through the waste review');
 select extensions.ok(not has_function_privilege('anon', 'app_private.remove_archived_waste_and_batch(uuid,text)', 'EXECUTE'), 'anonymous users cannot call the internal batch removal worker');
@@ -31,6 +31,9 @@ values ('00000000-0000-4000-8000-00000000c222', timezone('Asia/Bangkok', now()):
 insert into public.daily_closings (business_date, version, status, closed_at) values
   (timezone('Asia/Bangkok', now())::date, 1, 'closed', now()),
   (timezone('Asia/Bangkok', now())::date - 1, 1, 'closed', now());
+insert into public.closing_batch_counts (daily_closing_id, production_batch_id, expected_quantity, physical_remaining_quantity, calculated_sold_quantity)
+select id, '00000000-0000-4000-8000-00000000c221', 0, 0, 0
+from public.daily_closings where business_date = timezone('Asia/Bangkok', now())::date;
 
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-00000000c211', true);
 select extensions.is(
@@ -57,8 +60,9 @@ select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-00000000c211
 select extensions.is(
   public.remove_archived_waste_and_batch('00000000-0000-4000-8000-00000000c231', 'Incorrect batch entered by mistake') ->> 'outcome',
   'batch_removed',
-  'admin can remove an untouched batch and all unverified archived waste rows linked to it'
+  'admin can remove a batch whose closed-day snapshot contains only zero quantities'
 );
+select extensions.is((select count(*)::integer from public.closing_batch_counts c join public.daily_closings dc on dc.id = c.daily_closing_id where c.production_batch_id = '00000000-0000-4000-8000-00000000c221' and dc.status = 'closed'), 1, 'removal preserves the zero-valued closing snapshot for audit');
 select extensions.is((select count(*)::integer from public.waste_records where id in ('00000000-0000-4000-8000-00000000c231','00000000-0000-4000-8000-00000000c232')), 0, 'linked operational waste rows are removed');
 select extensions.is((select count(*)::integer from public.waste_record_photos where waste_record_id = '00000000-0000-4000-8000-00000000c232'), 0, 'linked operational photo metadata is removed');
 select extensions.is((select count(*)::integer from public.waste_archive_reviews where waste_record_id in ('00000000-0000-4000-8000-00000000c231','00000000-0000-4000-8000-00000000c232')), 2, 'both removed waste rows retain audit snapshots');

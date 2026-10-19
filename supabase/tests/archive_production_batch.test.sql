@@ -1,5 +1,5 @@
 begin;
-select plan(23);
+select plan(25);
 
 select ok(not has_function_privilege('anon', 'public.archive_production_batch(uuid,text)', 'EXECUTE'), 'anonymous users cannot archive batches');
 
@@ -22,11 +22,15 @@ insert into public.production_batches (id, menu_id, meat_option_id, production_d
   ('00000000-0000-4000-8000-000000000a21', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Beef'), timezone('Asia/Bangkok', now())::date, 12, timezone('Asia/Bangkok', now())::date + 3),
   ('00000000-0000-4000-8000-000000000a22', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Chicken'), timezone('Asia/Bangkok', now())::date, 6, timezone('Asia/Bangkok', now())::date + 3),
   ('00000000-0000-4000-8000-000000000a23', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Vegan'), date '2020-01-02', 4, date '2020-01-05'),
-  ('00000000-0000-4000-8000-000000000a24', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Pork'), timezone('Asia/Bangkok', now())::date, 3, timezone('Asia/Bangkok', now())::date + 3);
+  ('00000000-0000-4000-8000-000000000a24', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Pork'), timezone('Asia/Bangkok', now())::date, 3, timezone('Asia/Bangkok', now())::date + 3),
+  ('00000000-0000-4000-8000-000000000a25', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Pork'), timezone('Asia/Bangkok', now())::date, 1, timezone('Asia/Bangkok', now())::date + 3);
 insert into public.waste_records (production_batch_id, quantity, reason)
 values ('00000000-0000-4000-8000-000000000a22', 1, 'Spoiled');
 insert into public.daily_closings (business_date, version, status, closed_at)
 values (date '2020-01-02', 1, 'closed', now());
+insert into public.closing_batch_counts (daily_closing_id, production_batch_id, expected_quantity, physical_remaining_quantity, calculated_sold_quantity)
+select id, '00000000-0000-4000-8000-000000000a23', 4, 4, 0
+from public.daily_closings where business_date = date '2020-01-02';
 
 select throws_ok(
   $$update public.production_batches set deleted_at = now() where id = '00000000-0000-4000-8000-000000000a21'$$,
@@ -42,6 +46,15 @@ select ok(exists (
     and actor_id = '00000000-0000-4000-8000-000000000a12'
     and after_data ->> 'reason' = 'Front removed an incorrect production entry'
 ), 'the front correction is attributed and audited');
+insert into public.daily_closings (business_date, version, status, closed_at)
+values (timezone('Asia/Bangkok', now())::date, 1, 'closed', now());
+insert into public.closing_batch_counts (daily_closing_id, production_batch_id, expected_quantity, physical_remaining_quantity, calculated_sold_quantity)
+select id, '00000000-0000-4000-8000-000000000a25', 0, 0, 0
+from public.daily_closings where business_date = timezone('Asia/Bangkok', now())::date;
+select throws_ok(
+  $$select public.archive_production_batch('00000000-0000-4000-8000-000000000a25', 'Wrong menu')$$,
+  '23514', 'This day is closed. Reopen it before removing production.', 'Front cannot remove a batch after close even when its closing count is zero');
+select ok((select deleted_at is null from public.production_batches where id = '00000000-0000-4000-8000-000000000a25'), 'the zero-count batch remains active for Front after close');
 select throws_ok(
   $$select public.archive_production_batch('00000000-0000-4000-8000-000000000a23', 'ignored by Front')$$,
   '42501', 'Front can remove only an entry from today.', 'front cannot remove a historical batch');
@@ -56,7 +69,7 @@ select throws_ok(
   '23514', 'This batch has waste or after-close removals. Archive those records first.', 'a batch with waste is not a wrong entry');
 select throws_ok(
   $$select public.archive_production_batch('00000000-0000-4000-8000-000000000a23', 'Wrong menu')$$,
-  '23514', null, 'a batch counted by a closed day is protected');
+  '23514', null, 'a batch with stock left at a closed day is protected');
 select ok((select deleted_at is null from public.production_batches where id = '00000000-0000-4000-8000-000000000a23'), 'the closed-day batch stays active');
 
 select lives_ok(

@@ -59,7 +59,7 @@ export function ArchiveReviewDialog({ target, saving, error, onConfirm, onDismis
         </div>
         <button type="button" className="icon-button" aria-label={t('Close')} disabled={saving} onClick={onDismiss}><X size={17} /></button>
       </header>
-      <p id="archive-review-description" className="archive-review-description">{t(removing ? removeBatch ? 'Removing the batch also removes every unverified archived waste row attached to it, reverses those waste movements, and archives the batch so it leaves Produced. The action is blocked if the batch was sold, used, or counted at closing.' : 'Only this archived waste row will be removed. Its audit snapshot and original stock movement stay, so stock will not change.' : 'This entry will be counted as confirmed Waste, not Produced. Its current stock movement will not change.')}</p>
+      <p id="archive-review-description" className="archive-review-description">{t(removing ? removeBatch ? 'Removing the batch also removes every unverified archived waste row attached to it, reverses those waste movements, and archives the batch so it leaves Produced. Removal is blocked if stock was sold, left at closing, adjusted, or is still used by another active record.' : 'Only this archived waste row will be removed. Its audit snapshot and original stock movement stay, so stock will not change.' : 'This entry will be counted as confirmed Waste, not Produced. Its current stock movement will not change.')}</p>
       {error && <div className="archive-review-error" role="alert" aria-live="assertive"><AlertTriangle size={16} /><span>{error}</span></div>}
       <div className="archive-review-detail">
         <span className="archive-review-food-icon"><Utensils size={17} /></span>
