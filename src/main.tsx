@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles.css';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 
 // Pages load on demand. If a tablet was left open across a new deploy, its old
 // page files no longer exist; reload once to pick up the new version.
@@ -20,6 +21,6 @@ window.addEventListener('load', () => {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <AppErrorBoundary><App /></AppErrorBoundary>
   </React.StrictMode>,
 );

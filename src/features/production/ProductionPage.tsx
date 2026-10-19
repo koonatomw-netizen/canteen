@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
-import { Archive, ArrowRight, CalendarDays, Copy, PackagePlus, Plus } from 'lucide-react';
+import { Archive, ArrowRight, CalendarDays, Copy, PackagePlus, Plus, Trash2, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import { addCalendarDays, businessDateNow } from '../../lib/dates';
+import { addCalendarDays, advanceIfStillCurrentDate } from '../../lib/dates';
+import { useBusinessDate } from '../../lib/useBusinessDate';
 import { formatDate, formatFoodVariant, formatQuantity } from '../../lib/format';
 import { requireSupabase } from '../../lib/supabase';
 import { EmptyState, LoadingState, Notice } from '../../components/Feedback';
@@ -12,12 +13,18 @@ import { useAuth } from '../auth/AuthContext';
 import { isReadOnlyDemo } from '../auth/permissions';
 import { useI18n } from '../../lib/i18n';
 import { MenuItemsPage } from '../menus/MenuItemsPage';
+import { DuplicateProductionDialog } from './DuplicateProductionDialog';
 
 interface MenuItem { id: string; name: string; default_shelf_life_days: number; }
 interface MeatOption { id: string; name: string; }
 interface Batch { id: string; menu_id: string | null; menu_name_snapshot: string; production_date: string; quantity_produced: number; expiry_date: string; notes: string | null; meat_options: { name: string } | null; }
 interface ProductionDraft { menuId: string; meatOptionId: string; productionDate: string; quantity: string; expiryDate: string; notes: string; }
 interface ProductionPreference { menuId: string; meatOptionId: string; }
+interface PendingDuplicateBatch {
+  foodName: string;
+  productionDate: string;
+  batch: { menu_id: string; meat_option_id: string; production_date: string; quantity_produced: number; expiry_date: string; notes: string | null };
+}
 
 function isProductionDraft(value: unknown): value is ProductionDraft {
   if (!value || typeof value !== 'object') return false;
@@ -41,15 +48,17 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
   const canEdit = member?.role === 'admin' || member?.role === 'front';
   const showWriteControls = canEdit || isReadOnlyDemo(member?.role);
   const isAdmin = member?.role === 'admin';
-  const showArchiveControls = isAdmin || isReadOnlyDemo(member?.role);
+  const canArchiveBatch = isAdmin || member?.role === 'front';
+  const showArchiveControls = canArchiveBatch || isReadOnlyDemo(member?.role);
+  const today = useBusinessDate();
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [meatOptions, setMeatOptions] = useState<MeatOption[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [menuId, setMenuId] = useState(requestedMenuId ?? '');
   const [meatOptionId, setMeatOptionId] = useState('');
-  const [productionDate, setProductionDate] = useState(businessDateNow());
+  const [productionDate, setProductionDate] = useState(today);
   const [quantity, setQuantity] = useState('');
-  const [expiryDate, setExpiryDate] = useState(businessDateNow());
+  const [expiryDate, setExpiryDate] = useState(today);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -59,9 +68,15 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
   const [showMenuDialog, setShowMenuDialog] = useState(false);
   const [archiveBatchId, setArchiveBatchId] = useState<string | null>(null);
   const [archiveReason, setArchiveReason] = useState('');
+  const [duplicatePrompt, setDuplicatePrompt] = useState<PendingDuplicateBatch | null>(null);
+  const [selectingBatches, setSelectingBatches] = useState(false);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+  const previousToday = useRef(today);
   const preferenceKey = `canteen.production-selection:${member?.user_id ?? 'local'}`;
   const draftKey = `canteen.draft.production:${member?.user_id ?? 'local'}`;
   const draftValue = { menuId, meatOptionId, productionDate, quantity, expiryDate, notes };
+  const todayBatchIds = batches.filter((batch) => batch.production_date === today).map((batch) => batch.id);
+  const allTodayBatchesSelected = todayBatchIds.length > 0 && todayBatchIds.every((id) => selectedBatchIds.includes(id));
   const { status: draftStatus, clearDraft } = useLocalDraft<ProductionDraft>(draftKey, draftValue, (stored) => {
     if (!isProductionDraft(stored)) return;
     setMenuId(requestedMenuId ?? stored.menuId); setMeatOptionId(stored.meatOptionId); setProductionDate(stored.productionDate);
@@ -88,7 +103,14 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
     setBusy(false);
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [today]);
+  useEffect(() => {
+    if (previousToday.current === today) return;
+    const previousDate = previousToday.current;
+    previousToday.current = today;
+    const hasUnsavedWork = Boolean(quantity.trim() || notes.trim());
+    setProductionDate((current) => advanceIfStillCurrentDate(current, previousDate, today, hasUnsavedWork));
+  }, [today, quantity, notes]);
   useEffect(() => {
     const menu = menus.find((item) => item.id === menuId);
     if (menu) setExpiryDate(addCalendarDays(productionDate, menu.default_shelf_life_days));
@@ -98,24 +120,94 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
     event.preventDefault();
     if (!canEdit) return;
     setError(''); setSuccess(''); setSaving(true);
-    const { error: saveError } = await requireSupabase().from('production_batches').insert({
-      menu_id: menuId, meat_option_id: meatOptionId, production_date: productionDate, quantity_produced: Number(quantity), expiry_date: expiryDate, notes: notes.trim() || null,
-    });
-    if (saveError) setError(saveError.message);
-    else { setSuccess(t('Production batch recorded.')); setQuantity(''); setNotes(''); clearDraft(); await load(); }
-    setSaving(false);
+    try {
+      const db = requireSupabase();
+      const { data: duplicate, error: duplicateError } = await db.from('production_batches')
+        .select('id').eq('menu_id', menuId).eq('meat_option_id', meatOptionId)
+        .eq('production_date', productionDate).is('deleted_at', null).limit(1).maybeSingle();
+      if (duplicateError) { setError(duplicateError.message); return; }
+      if (duplicate) {
+        const menuName = menus.find((menu) => menu.id === menuId)?.name ?? '';
+        const meatName = meatOptions.find((meat) => meat.id === meatOptionId)?.name;
+        const foodName = formatFoodVariant(menuName, meatName);
+        setDuplicatePrompt({
+          foodName,
+          productionDate,
+          batch: { menu_id: menuId, meat_option_id: meatOptionId, production_date: productionDate, quantity_produced: Number(quantity), expiry_date: expiryDate, notes: notes.trim() || null },
+        });
+        return;
+      }
+      const { error: saveError } = await db.from('production_batches').insert({
+        menu_id: menuId, meat_option_id: meatOptionId, production_date: productionDate, quantity_produced: Number(quantity), expiry_date: expiryDate, notes: notes.trim() || null,
+      });
+      if (saveError) setError(saveError.message);
+      else { setSuccess(t('Production batch recorded.')); setQuantity(''); setNotes(''); clearDraft(); await load(); }
+    } catch { setError(t('Could not check or save production. Check the connection and try again.')); }
+    finally { setSaving(false); }
+  }
+
+  async function confirmDuplicateBatch() {
+    if (!duplicatePrompt || saving) return;
+    setError(''); setSuccess(''); setSaving(true);
+    try {
+      const { error: saveError } = await requireSupabase().from('production_batches').insert(duplicatePrompt.batch);
+      if (saveError) { setError(t(saveError.message)); setDuplicatePrompt(null); return; }
+      setDuplicatePrompt(null); setSuccess(t('Production batch recorded.')); setQuantity(''); setNotes(''); clearDraft(); await load();
+    } catch { setError(t('Could not save the production batch. Check the connection and try again.')); setDuplicatePrompt(null); }
+    finally { setSaving(false); }
   }
 
   async function archiveBatch(batch: Batch) {
-    if (!isAdmin || saving) return;
-    const reason = archiveReason.trim();
-    if (reason.length < 3) { setError(t('Add a reason before archiving this batch.')); return; }
-    if (!window.confirm(`${t('Archive')} ${formatFoodVariant(batch.menu_name_snapshot, batch.meat_options?.name)} (${formatDate(batch.production_date)}, ${formatQuantity(batch.quantity_produced)} ${t('boxes')})? ${t('This cannot be undone; record the production again if needed.')}`)) return;
+    if (!canArchiveBatch || saving) return;
+    const isFront = member?.role === 'front';
+    if (isFront && batch.production_date !== today) return;
+    const reason = isFront ? 'Front removed an incorrect production entry' : archiveReason.trim();
+    if (!isFront && reason.length < 3) { setError(t('Add a reason before archiving this batch.')); return; }
+    const foodName = formatFoodVariant(batch.menu_name_snapshot, batch.meat_options?.name);
+    const confirmMessage = isFront
+      ? `${t('Remove')} ${foodName} (${formatDate(batch.production_date)}, ${formatQuantity(batch.quantity_produced)} ${t('boxes')})? ${t('This entry will be removed from today’s stock and saved in the activity log.')}`
+      : `${t('Archive')} ${foodName} (${formatDate(batch.production_date)}, ${formatQuantity(batch.quantity_produced)} ${t('boxes')})? ${t('This cannot be undone; record the production again if needed.')}`;
+    if (!window.confirm(confirmMessage)) return;
     setError(''); setSuccess(''); setSaving(true);
-    const { error: archiveError } = await requireSupabase().rpc('archive_production_batch', { p_batch_id: batch.id, p_reason: reason });
-    if (archiveError) setError(t(archiveError.message));
-    else { setSuccess(t('Batch archived. Its boxes were removed from stock and the reason is in the activity log.')); setArchiveBatchId(null); setArchiveReason(''); await load(); }
-    setSaving(false);
+    try {
+      const { error: archiveError } = await requireSupabase().rpc('archive_production_batch', { p_batch_id: batch.id, p_reason: reason });
+      if (archiveError) setError(t(archiveError.message));
+      else {
+        setSuccess(t(isFront ? 'Incorrect production entry removed.' : 'Batch archived. Its boxes were removed from stock and the reason is in the activity log.'));
+        setSelectedBatchIds((current) => current.filter((id) => id !== batch.id));
+        setArchiveBatchId(null); setArchiveReason(''); await load();
+      }
+    } catch { setError(t('Could not remove this production entry. Check the connection and try again.')); }
+    finally { setSaving(false); }
+  }
+
+  async function archiveSelectedBatches() {
+    if (member?.role !== 'front' || saving || selectedBatchIds.length === 0) return;
+    const selected = batches.filter((batch) => selectedBatchIds.includes(batch.id) && batch.production_date === today);
+    if (selected.length !== selectedBatchIds.length) {
+      setError(t('Selection changed. Refresh the list and select the batches again.'));
+      setSelectedBatchIds([]);
+      return;
+    }
+    const confirmMessage = `${t('Remove selected production entries?')} (${selected.length}) ${t('This removes them from today’s stock and keeps an activity record. This cannot be undone.')}`;
+    if (!window.confirm(confirmMessage)) return;
+    setError(''); setSuccess(''); setSaving(true);
+    try {
+      const { data, error: archiveError } = await requireSupabase().rpc('archive_production_batches', {
+        p_batch_ids: selected.map((batch) => batch.id),
+      });
+      if (archiveError) setError(archiveError.code === 'PGRST202' ? t('Multiple production removal is not ready yet. The database update is required.') : t(archiveError.message));
+      else {
+        const removedCount = Number(data ?? selected.length);
+        setSuccess(`${t('Removed selected production entries.')}: ${removedCount}`);
+        setSelectedBatchIds([]); setSelectingBatches(false); await load();
+      }
+    } catch { setError(t('Could not remove the selected production entries. Check the connection and try again.')); }
+    finally { setSaving(false); }
+  }
+
+  function toggleBatchSelection(batchId: string) {
+    setSelectedBatchIds((current) => current.includes(batchId) ? current.filter((id) => id !== batchId) : [...current, batchId]);
   }
 
   function rememberSelection(nextMenuId: string, nextMeatOptionId: string) {
@@ -155,6 +247,7 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
   return <>
     {!embedded && <PageTitle eyebrow={canEdit ? 'FRESH FROM THE KITCHEN' : 'PRODUCTION HISTORY'} title="Production" detail={canEdit ? 'Record today’s prepared food. Every entry creates its own batch.' : isReadOnlyDemo(member?.role) ? t('View-only demo: changes are disabled.') : 'Review production batches. This account cannot change records.'} action={showWriteControls ? <button type="button" onClick={() => setShowMenuDialog(true)} className="button button-quiet"><Plus size={17} />{t('Add a menu')}</button> : undefined} />}
     {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
+    <DuplicateProductionDialog open={Boolean(duplicatePrompt)} foodName={duplicatePrompt?.foodName ?? ''} productionDate={duplicatePrompt?.productionDate ?? ''} saving={saving} onConfirm={() => void confirmDuplicateBatch()} onDismiss={() => { if (!saving) setDuplicatePrompt(null); }} />
     <div className="workflow-grid production-grid">
       {showWriteControls && <section className="panel workflow-form-panel"><div className="panel-head"><div><span className="eyebrow">{t('NEW BATCH')}</span><h2>{t('What did you make?')}</h2></div><div className="production-panel-actions"><span className="form-panel-icon"><PackagePlus size={20} /></span>{embedded && <button type="button" className="button button-quiet button-small" onClick={() => setShowMenuDialog(true)}><Plus size={15} />{t('Add a menu')}</button>}</div></div>
         {menus.length === 0 && !busy ? <EmptyState title="Add a menu first" detail="Create a menu here, then record production." /> : meatOptions.length === 0 && !busy ? <EmptyState title="Add a meat option first" detail="Add a shared option such as beef, chicken, pork, or vegan in Manage." /> : <form className="data-form" onSubmit={addBatch}>
@@ -167,8 +260,9 @@ export function ProductionPage({ embedded = false }: { embedded?: boolean }) {
           <p className="form-footnote"><span /> {t('Quantities are checked against stock before any future deduction.')}</p>
         </form>}
       </section>}
-      <section className="panel production-history"><div className="panel-head"><div><span className="eyebrow">{t('YOUR DAILY RECORD')}</span><h2>{t('Recent batches')}</h2></div><span className="count-chip">{batches.length} {t('BATCHES')}</span></div>
-        {busy ? <LoadingState label="Loading batches…" /> : batches.length === 0 ? <EmptyState title={t('No batches recorded yet')} detail={t('Your production history will grow with every kitchen day.')} /> : <div className="batch-table-wrap"><table className="data-table"><thead><tr><th>{t('Food & batch')}</th><th>{t('Made')}</th><th>{t('Prepared')}</th><th>{t('Best before')}</th></tr></thead><tbody>{batches.map((batch) => <Fragment key={batch.id}><tr><td><strong>{formatFoodVariant(batch.menu_name_snapshot, batch.meat_options?.name)}</strong><small className="cell-subtle">{t('Batch')} · {batch.id.slice(0, 8).toUpperCase()}</small>{showArchiveControls && archiveBatchId !== batch.id && <button type="button" className="batch-archive-link" disabled={!isAdmin || saving} onClick={() => { setArchiveBatchId(batch.id); setArchiveReason(''); setError(''); setSuccess(''); }}><Archive size={12} />{t('Archive wrong entry')}</button>}</td><td>{formatDate(batch.production_date)}</td><td><span className="quantity-cell">{formatQuantity(batch.quantity_produced)} {t('boxes')}</span></td><td>{formatDate(batch.expiry_date)}</td></tr>
+      <section className="panel production-history"><div className="panel-head"><div><span className="eyebrow">{t('YOUR DAILY RECORD')}</span><h2>{t('Recent batches')}</h2></div><div className="production-history-actions"><span className="count-chip">{batches.length} {t('BATCHES')}</span>{member?.role === 'front' && todayBatchIds.length > 0 && (selectingBatches ? <div className="production-bulk-actions"><button type="button" className="button button-quiet button-small" disabled={saving} onClick={() => setSelectedBatchIds(allTodayBatchesSelected ? [] : todayBatchIds)}>{t(allTodayBatchesSelected ? 'Clear selection' : 'Select all shown today')}</button><button type="button" className="button button-small production-bulk-remove" disabled={saving || selectedBatchIds.length === 0} onClick={() => void archiveSelectedBatches()}><Trash2 size={14} />{t('Remove selected')} ({selectedBatchIds.length})</button><button type="button" className="icon-button" title={t('Close selection')} aria-label={t('Close selection')} disabled={saving} onClick={() => { setSelectingBatches(false); setSelectedBatchIds([]); }}><X size={15} /></button></div> : <button type="button" className="button button-quiet button-small" disabled={saving} onClick={() => setSelectingBatches(true)}>{t('Select multiple')}</button>)}</div></div>
+        {selectingBatches && <p className="production-bulk-hint">{t('Select the visible batches made today to remove them together. The removal is all-or-nothing.')}</p>}
+        {busy ? <LoadingState label="Loading batches…" /> : batches.length === 0 ? <EmptyState title={t('No batches recorded yet')} detail={t('Your production history will grow with every kitchen day.')} /> : <div className="batch-table-wrap"><table className="data-table"><thead><tr><th>{t('Food & batch')}</th><th>{t('Made')}</th><th>{t('Prepared')}</th><th>{t('Best before')}</th></tr></thead><tbody>{batches.map((batch) => <Fragment key={batch.id}><tr><td>{selectingBatches && member?.role === 'front' && batch.production_date === today && <label className="production-batch-select"><input type="checkbox" checked={selectedBatchIds.includes(batch.id)} disabled={saving} onChange={() => toggleBatchSelection(batch.id)} /><span>{t('Select batch')}</span></label>}<strong>{formatFoodVariant(batch.menu_name_snapshot, batch.meat_options?.name)}</strong><small className="cell-subtle">{t('Batch')} · {batch.id.slice(0, 8).toUpperCase()}</small>{showArchiveControls && !selectingBatches && (isAdmin || batch.production_date === today) && archiveBatchId !== batch.id && <button type="button" className="batch-archive-link" disabled={!canArchiveBatch || saving} onClick={() => { setError(''); setSuccess(''); if (isAdmin) { setArchiveBatchId(batch.id); setArchiveReason(''); } else void archiveBatch(batch); }}>{isAdmin ? <Archive size={12} /> : <Trash2 size={12} />}{t(isAdmin ? 'Archive wrong entry' : 'Remove production entry')}</button>}</td><td>{formatDate(batch.production_date)}</td><td><span className="quantity-cell">{formatQuantity(batch.quantity_produced)} {t('boxes')}</span></td><td>{formatDate(batch.expiry_date)}</td></tr>
             {archiveBatchId === batch.id && <tr className="batch-archive-row"><td colSpan={4}><form className="reopen-reason-form batch-archive-form" onSubmit={(event) => { event.preventDefault(); void archiveBatch(batch); }}>
               <p>{t('Use this only for a batch entered by mistake. Its')} {formatQuantity(batch.quantity_produced)} {t('boxes are removed from stock, and the reason is saved in the activity log.')}</p>
               <label>{t('Why is this batch wrong?')}<textarea rows={2} required minLength={3} maxLength={500} value={archiveReason} disabled={!isAdmin || saving} placeholder={t('For example: test entry, wrong menu, entered twice')} onChange={(event) => setArchiveReason(event.target.value)} /></label>

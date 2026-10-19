@@ -25,6 +25,7 @@ const TodayPage = lazyPage(() => import('./features/home/TodayPage').then((m) =>
 const ColivingPage = lazyPage(() => import('./features/coliving/ColivingPage').then((m) => m.ColivingPage));
 import { canAccessRoute, homePathForRole } from './features/auth/permissions';
 import { useI18n } from './lib/i18n';
+import { ThemeProvider } from './lib/theme';
 import { LanguageToggle } from './components/LanguageToggle';
 
 function RoleGate({ children }: { children: ReactNode }) {
@@ -81,5 +82,5 @@ function AuthenticatedRoutes() {
 }
 
 export default function App() {
-  return <I18nProvider><BrowserRouter><AuthProvider><AuthenticatedRoutes /></AuthProvider></BrowserRouter></I18nProvider>;
+  return <ThemeProvider><I18nProvider><BrowserRouter><AuthProvider><AuthenticatedRoutes /></AuthProvider></BrowserRouter></I18nProvider></ThemeProvider>;
 }

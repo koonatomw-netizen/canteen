@@ -1,5 +1,5 @@
 begin;
-select plan(18);
+select plan(23);
 
 select ok(not has_function_privilege('anon', 'public.archive_production_batch(uuid,text)', 'EXECUTE'), 'anonymous users cannot archive batches');
 
@@ -14,23 +14,38 @@ where user_id = '00000000-0000-4000-8000-000000000a11';
 update public.app_members set display_name = 'Archive front', role = 'front', active = true
 where user_id = '00000000-0000-4000-8000-000000000a12';
 
--- Front staff record three batches: one wrong entry, one with waste, and one on an old day that gets closed.
+-- Front staff record four batches: a removable same-day mistake, one with
+-- waste, an untouched entry that Front may not directly archive, and one old
+-- day that gets closed.
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000a12', true);
 insert into public.production_batches (id, menu_id, meat_option_id, production_date, quantity_produced, expiry_date) values
   ('00000000-0000-4000-8000-000000000a21', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Beef'), timezone('Asia/Bangkok', now())::date, 12, timezone('Asia/Bangkok', now())::date + 3),
   ('00000000-0000-4000-8000-000000000a22', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Chicken'), timezone('Asia/Bangkok', now())::date, 6, timezone('Asia/Bangkok', now())::date + 3),
-  ('00000000-0000-4000-8000-000000000a23', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Vegan'), date '2020-01-02', 4, date '2020-01-05');
+  ('00000000-0000-4000-8000-000000000a23', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Vegan'), date '2020-01-02', 4, date '2020-01-05'),
+  ('00000000-0000-4000-8000-000000000a24', '00000000-0000-4000-8000-000000000a01', (select id from public.meat_options where name = 'Pork'), timezone('Asia/Bangkok', now())::date, 3, timezone('Asia/Bangkok', now())::date + 3);
 insert into public.waste_records (production_batch_id, quantity, reason)
 values ('00000000-0000-4000-8000-000000000a22', 1, 'Spoiled');
 insert into public.daily_closings (business_date, version, status, closed_at)
 values (date '2020-01-02', 1, 'closed', now());
 
 select throws_ok(
-  $$select public.archive_production_batch('00000000-0000-4000-8000-000000000a21', 'Test entry')$$,
-  '42501', 'Only a Website Admin can archive a production batch.', 'front staff cannot archive a batch');
-select throws_ok(
   $$update public.production_batches set deleted_at = now() where id = '00000000-0000-4000-8000-000000000a21'$$,
-  '23514', 'A batch with stock remaining cannot be archived. Record its final count first.', 'the direct archive path still refuses a batch with stock');
+  '42501', 'Front staff must use the remove-entry action.', 'front staff cannot archive a batch directly');
+select lives_ok(
+  $$select public.archive_production_batch('00000000-0000-4000-8000-000000000a24', 'ignored by Front')$$,
+  'front staff can remove an untouched batch from today');
+select ok((select deleted_at is not null from public.production_batches where id = '00000000-0000-4000-8000-000000000a24'), 'the front correction is soft-deleted');
+select is((select sum(quantity_delta)::integer from public.stock_movements where production_batch_id = '00000000-0000-4000-8000-000000000a24'), 0, 'the wrong same-day entry is removed from stock');
+select ok(exists (
+  select 1 from public.activity_logs
+  where entity_id = '00000000-0000-4000-8000-000000000a24' and action = 'archived'
+    and actor_id = '00000000-0000-4000-8000-000000000a12'
+    and after_data ->> 'reason' = 'Front removed an incorrect production entry'
+), 'the front correction is attributed and audited');
+select throws_ok(
+  $$select public.archive_production_batch('00000000-0000-4000-8000-000000000a23', 'ignored by Front')$$,
+  '42501', 'Front can remove only an entry from today.', 'front cannot remove a historical batch');
+select ok((select deleted_at is null from public.production_batches where id = '00000000-0000-4000-8000-000000000a23'), 'the historical batch remains active');
 
 select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000a11', true);
 select throws_ok(

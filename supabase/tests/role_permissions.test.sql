@@ -102,6 +102,9 @@ select lives_ok(
   'Kitchen can edit expenses after the daily close');
 update public.production_batches set expiry_date = expiry_date + 1
 where id = '00000000-0000-4000-8000-000000006301';
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000006103', true);
+set local role authenticated;
 select is((select expiry_date from public.production_batches where id = '00000000-0000-4000-8000-000000006301'), timezone('Asia/Bangkok', now())::date + 3, 'Kitchen cannot change production or stock');
 reset role;
 

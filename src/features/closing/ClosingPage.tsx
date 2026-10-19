@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AlertTriangle, CalendarCheck, CheckCircle2, ChevronRight, ClipboardCheck, LockKeyhole, RotateCcw, X } from 'lucide-react';
 import { EmptyState, LoadingState, Notice } from '../../components/Feedback';
 import { PageTitle } from '../../components/PageTitle';
 import { DraftStatus } from '../../components/DraftStatus';
-import { businessDateNow, formatBusinessDate } from '../../lib/dates';
+import { advanceIfStillCurrentDate, formatBusinessDate } from '../../lib/dates';
+import { useBusinessDate } from '../../lib/useBusinessDate';
 import { formatFoodVariant, formatQuantity } from '../../lib/format';
 import { readLocalDraft, removeLocalDraft, writeLocalDraft, type DraftSaveStatus } from '../../lib/localDrafts';
 import { readAll } from '../../lib/pagination';
@@ -43,7 +44,9 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
   const canEdit = member?.role === 'admin' || member?.role === 'front';
   const isAuditor = isReadOnlyDemo(member?.role);
   const showWriteControls = canEdit || isAuditor;
-  const [businessDate, setBusinessDate] = useState(businessDateNow());
+  const today = useBusinessDate();
+  const [businessDate, setBusinessDate] = useState(today);
+  const previousToday = useRef(today);
   const [stock, setStock] = useState<ClosingVariant[]>([]);
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
@@ -127,6 +130,13 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
     setBusy(false);
   }
   const alreadyClosed = closing?.status === 'closed';
+  useEffect(() => {
+    if (previousToday.current === today) return;
+    const previousDate = previousToday.current;
+    previousToday.current = today;
+    const hasUnsavedWork = Object.values(counts).some((value) => value !== '') || note.trim().length > 0;
+    setBusinessDate((current) => advanceIfStillCurrentDate(current, previousDate, today, hasUnsavedWork));
+  }, [today, counts, note]);
   useEffect(() => { void load(); }, [businessDate, isAuditor]);
 
   useEffect(() => {
@@ -219,7 +229,7 @@ export function ClosingPage({ embedded = false }: { embedded?: boolean }) {
   return <>
     {!embedded && <PageTitle eyebrow={canEdit ? 'THE LAST THING BEFORE HOME' : 'READ-ONLY AUDIT'} title="Daily closing" detail={canEdit ? 'Count what’s still in the kitchen. Enter one total for each menu and meat option.' : isAuditor ? t('View-only demo: changes are disabled.') : 'Review the saved closing for any business date. This account cannot change counts.'} />}
     {error && <Notice>{error}</Notice>}{success && <Notice tone="success">{success}</Notice>}
-    <div className="closing-date-row"><label>{t('Business day')}<input type="date" value={businessDate} max={businessDateNow()} onChange={(event) => setBusinessDate(event.target.value)} /></label><span className={alreadyClosed ? 'closing-state closed' : 'closing-state'}>{alreadyClosed ? <><CheckCircle2 size={16} /> {t('Day closed')} · {t('version')} {closing.version}</> : <><CalendarCheck size={16} /> {t(showWriteControls ? closing?.status === 'reopened' ? 'Reopened · please count again' : 'Ready to count' : 'Day not closed')}</>}</span></div>
+    <div className="closing-date-row"><label>{t('Business day')}<input type="date" value={businessDate} max={today} onChange={(event) => setBusinessDate(event.target.value)} /></label><span className={alreadyClosed ? 'closing-state closed' : 'closing-state'}>{alreadyClosed ? <><CheckCircle2 size={16} /> {t('Day closed')} · {t('version')} {closing.version}</> : <><CalendarCheck size={16} /> {t(showWriteControls ? closing?.status === 'reopened' ? 'Reopened · please count again' : 'Ready to count' : 'Day not closed')}</>}</span></div>
     {busy ? <section className="panel"><LoadingState label="Preparing this day’s count…" /></section> : <div className="closing-layout">
       {showWriteControls ? <form className="panel closing-form" onSubmit={submit}>
         <div className="panel-head"><div><span className="eyebrow">{t('PHYSICAL STOCK COUNT')}</span><h2>{t('How many are left?')}</h2></div><span className="form-panel-icon green"><ClipboardCheck size={20} /></span></div>

@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Archive, Check, Plus, ReceiptText, RotateCcw } from 'lucide-react';
 import { EmptyState, LoadingState, Notice } from '../../components/Feedback';
 import { PageTitle } from '../../components/PageTitle';
-import { businessDateNow, formatBusinessDate } from '../../lib/dates';
+import { advanceIfStillCurrentDate, formatBusinessDate } from '../../lib/dates';
+import { useBusinessDate } from '../../lib/useBusinessDate';
 import { formatBaht } from '../../lib/format';
 import { attachPrivatePhotos, signPrivatePhotos } from '../../lib/photoAttachments';
 import { requireSupabase } from '../../lib/supabase';
@@ -28,19 +29,20 @@ export function ExpensesPage() {
   const canCreateExpense = member?.role === 'admin' || member?.role === 'kitchen';
   const canViewExpenses = member?.role === 'admin';
   const canManageExpenses = member?.role === 'admin';
+  const today = useBusinessDate();
   const [stores, setStores] = useState<Option[]>([]);
   const [categories, setCategories] = useState<Option[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [storeId, setStoreId] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [date, setDate] = useState(businessDateNow());
+  const [date, setDate] = useState(today);
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [receipts, setReceipts] = useState<File[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStoreId, setEditStoreId] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
-  const [editDate, setEditDate] = useState(businessDateNow());
+  const [editDate, setEditDate] = useState(today);
   const [editAmount, setEditAmount] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editReceipts, setEditReceipts] = useState<File[]>([]);
@@ -49,11 +51,21 @@ export function ExpensesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const previousToday = useRef(today);
   const draftKey = `canteen.draft.expense:${member?.user_id ?? 'local'}`;
   const { status: draftStatus, clearDraft } = useLocalDraft<ExpenseDraft>(draftKey, { storeId, categoryId, date, amount, notes }, (stored) => {
     if (!isExpenseDraft(stored)) return;
     setStoreId(stored.storeId); setCategoryId(stored.categoryId); setDate(stored.date); setAmount(stored.amount); setNotes(stored.notes);
   }, (value) => Boolean(value.amount.trim() || value.notes.trim()));
+
+  useEffect(() => {
+    if (previousToday.current === today) return;
+    const previousDate = previousToday.current;
+    previousToday.current = today;
+    const hasUnsavedWork = Boolean(amount.trim() || notes.trim());
+    setDate((current) => advanceIfStillCurrentDate(current, previousDate, today, hasUnsavedWork));
+    setEditDate((current) => advanceIfStillCurrentDate(current, previousDate, today, Boolean(editAmount.trim() || editNotes.trim())));
+  }, [today, amount, notes, editAmount, editNotes]);
 
   async function load() {
     setBusy(true);
@@ -134,7 +146,7 @@ export function ExpensesPage() {
     await load(); setSaving(false);
   }
 
-  const total = canViewExpenses ? expenses.filter((item) => item.expense_date === businessDateNow() && !item.deleted_at).reduce((sum, item) => sum + Number(item.amount_thb), 0) : 0;
+  const total = canViewExpenses ? expenses.filter((item) => item.expense_date === today && !item.deleted_at).reduce((sum, item) => sum + Number(item.amount_thb), 0) : 0;
   const visibleExpenses = expenses.filter((item) => Boolean(item.deleted_at) === showArchived);
 
   return <>
@@ -153,7 +165,7 @@ export function ExpensesPage() {
         </form>}
       </section>}
       {canViewExpenses && <section className="panel"><div className="panel-head"><div><span className="eyebrow">{t('THE DAILY SPEND')}</span><h2>{t(showArchived ? 'Archived expenses' : 'Recent expenses')}</h2></div><button className="button button-quiet button-small" onClick={() => setShowArchived(!showArchived)}>{showArchived ? <RotateCcw size={14} /> : <Archive size={14} />}{t(showArchived ? 'Show active' : 'Show archived')}</button></div>
-        {busy ? <LoadingState label="Loading expenses…" /> : visibleExpenses.length === 0 ? <EmptyState title={t(showArchived ? 'Nothing archived' : 'No expenses yet')} detail={t(showArchived ? 'Archived expenses can be restored here.' : 'Your spending summary will become more useful as receipts come in.')} /> : <div className="expense-history-list">{visibleExpenses.map((expense) => <div className={`expense-history-entry${expense.deleted_at ? ' row-archived' : ''}`} key={expense.id}><div className="expense-history-row"><span className="expense-history-icon"><ReceiptText size={17} /></span><span className="expense-history-main"><strong>{t(expense.stores?.name ?? 'Other')} <small>{t(expense.expense_categories?.name ?? 'Expense')}</small></strong><span>{formatBusinessDate(expense.expense_date)}{expense.notes ? ` · ${expense.notes}` : ''}{expense.photoUrls?.length ? ` · ${expense.photoUrls.length} ${t(expense.photoUrls.length === 1 ? 'photo' : 'photos')}` : ''}</span>{Boolean(expense.photoUrls?.length) && <div className="attachment-links">{expense.photoUrls!.map((url, index) => <a href={url} key={url} target="_blank" rel="noreferrer">{t('Receipt')} {index + 1}</a>)}</div>}</span><span className="expense-history-amount">{formatBaht(expense.amount_thb)}</span>{canManageExpenses && <div className="expense-row-actions">{!expense.deleted_at && <button className="button button-quiet button-small" disabled={!canManageExpenses} onClick={() => editingId === expense.id ? setEditingId(null) : beginEdit(expense)}>{t(editingId === expense.id ? 'Cancel' : 'Edit')}</button>}<button className="icon-button" disabled={!canManageExpenses} aria-label={t(expense.deleted_at ? 'Restore expense' : 'Archive expense')} title={t(expense.deleted_at ? 'Restore expense' : 'Archive expense')} onClick={() => void archiveExpense(expense)}>{expense.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}</button></div>}</div>{editingId === expense.id && canManageExpenses && <form className="expense-edit-form" onSubmit={(event) => void saveExpenseEdit(event, expense)}><div className="form-two-cols"><label>{t('Store')}<select required value={editStoreId} onChange={(event) => setEditStoreId(event.target.value)}>{stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></label><label>{t('Category')}<select required value={editCategoryId} onChange={(event) => setEditCategoryId(event.target.value)}>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label></div><div className="form-two-cols"><label>{t('Date')}<input type="date" max={businessDateNow()} required value={editDate} onChange={(event) => setEditDate(event.target.value)} /></label><label>{t('Amount (THB)')}<input type="number" min="0.01" step="0.01" required value={editAmount} onChange={(event) => setEditAmount(event.target.value)} /></label></div><label>{t('Note')}<textarea rows={2} maxLength={2000} value={editNotes} onChange={(event) => setEditNotes(event.target.value)} /></label><PhotoAttachmentsPicker files={editReceipts} onChange={setEditReceipts} label={editReceipts.length ? `${editReceipts.length} ${t('new receipt photos')}` : t('Add more receipt photos')} hint={t('Existing receipt photos stay attached.')} /><button className="button button-primary button-small" disabled={saving}><Check size={14} />{saving ? t('Saving…') : t('Save changes')}</button></form>}</div>)}</div>}
+        {busy ? <LoadingState label="Loading expenses…" /> : visibleExpenses.length === 0 ? <EmptyState title={t(showArchived ? 'Nothing archived' : 'No expenses yet')} detail={t(showArchived ? 'Archived expenses can be restored here.' : 'Your spending summary will become more useful as receipts come in.')} /> : <div className="expense-history-list">{visibleExpenses.map((expense) => <div className={`expense-history-entry${expense.deleted_at ? ' row-archived' : ''}`} key={expense.id}><div className="expense-history-row"><span className="expense-history-icon"><ReceiptText size={17} /></span><span className="expense-history-main"><strong>{t(expense.stores?.name ?? 'Other')} <small>{t(expense.expense_categories?.name ?? 'Expense')}</small></strong><span>{formatBusinessDate(expense.expense_date)}{expense.notes ? ` · ${expense.notes}` : ''}{expense.photoUrls?.length ? ` · ${expense.photoUrls.length} ${t(expense.photoUrls.length === 1 ? 'photo' : 'photos')}` : ''}</span>{Boolean(expense.photoUrls?.length) && <div className="attachment-links">{expense.photoUrls!.map((url, index) => <a href={url} key={url} target="_blank" rel="noreferrer">{t('Receipt')} {index + 1}</a>)}</div>}</span><span className="expense-history-amount">{formatBaht(expense.amount_thb)}</span>{canManageExpenses && <div className="expense-row-actions">{!expense.deleted_at && <button className="button button-quiet button-small" disabled={!canManageExpenses} onClick={() => editingId === expense.id ? setEditingId(null) : beginEdit(expense)}>{t(editingId === expense.id ? 'Cancel' : 'Edit')}</button>}<button className="icon-button" disabled={!canManageExpenses} aria-label={t(expense.deleted_at ? 'Restore expense' : 'Archive expense')} title={t(expense.deleted_at ? 'Restore expense' : 'Archive expense')} onClick={() => void archiveExpense(expense)}>{expense.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}</button></div>}</div>{editingId === expense.id && canManageExpenses && <form className="expense-edit-form" onSubmit={(event) => void saveExpenseEdit(event, expense)}><div className="form-two-cols"><label>{t('Store')}<select required value={editStoreId} onChange={(event) => setEditStoreId(event.target.value)}>{stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></label><label>{t('Category')}<select required value={editCategoryId} onChange={(event) => setEditCategoryId(event.target.value)}>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label></div><div className="form-two-cols"><label>{t('Date')}<input type="date" max={today} required value={editDate} onChange={(event) => setEditDate(event.target.value)} /></label><label>{t('Amount (THB)')}<input type="number" min="0.01" step="0.01" required value={editAmount} onChange={(event) => setEditAmount(event.target.value)} /></label></div><label>{t('Note')}<textarea rows={2} maxLength={2000} value={editNotes} onChange={(event) => setEditNotes(event.target.value)} /></label><PhotoAttachmentsPicker files={editReceipts} onChange={setEditReceipts} label={editReceipts.length ? `${editReceipts.length} ${t('new receipt photos')}` : t('Add more receipt photos')} hint={t('Existing receipt photos stay attached.')} /><button className="button button-primary button-small" disabled={saving}><Check size={14} />{saving ? t('Saving…') : t('Save changes')}</button></form>}</div>)}</div>}
       </section>}
     </div>
   </>;

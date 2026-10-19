@@ -1,18 +1,22 @@
 export const BUSINESS_TIME_ZONE = 'Asia/Bangkok';
 
-export function businessDateNow(): string {
+export function businessDateNow(now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: BUSINESS_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date());
+  }).format(now);
 }
 
 export function addCalendarDays(date: string, days: number): string {
   const parsed = new Date(`${date}T00:00:00.000Z`);
   parsed.setUTCDate(parsed.getUTCDate() + days);
   return parsed.toISOString().slice(0, 10);
+}
+
+export function advanceIfStillCurrentDate(selectedDate: string, previousToday: string, today: string, hasUnsavedWork = false): string {
+  return selectedDate === previousToday && !hasUnsavedWork ? today : selectedDate;
 }
 
 export function formatBusinessDate(date: string): string {

@@ -18,7 +18,7 @@ import { getStockRecordMode, type StockRecordMode } from './workflow';
 interface StockRow { id: string; menu_id: string | null; menu_name: string; production_date: string; expiry_date: string; quantity_remaining: number; }
 interface Reason { id: string; name: string; active: boolean; }
 interface BatchName { menu_name_snapshot: string; meat_options: { name: string } | null; production_date: string; }
-interface WasteRow { id: string; quantity: number; reason: string; notes: string | null; waste_date: string; photo_url: string | null; deleted_at: string | null; waste_record_photos?: { file_path: string }[]; photoUrls?: string[]; production_batches: BatchName | null; }
+interface WasteRow { id: string; quantity: number; reason: string; notes: string | null; waste_date: string; photo_url: string | null; deleted_at: string | null; stock_ledger_preserved_on_archive: boolean; archive_review_status: 'unverified' | 'verified_waste'; waste_record_photos?: { file_path: string }[]; photoUrls?: string[]; production_batches: BatchName | null; }
 interface StockOutRow { id: string; quantity: number; reason: string; notes: string | null; removal_date: string; deleted_at: string | null; production_batches: BatchName | null; }
 
 type RecordMode = StockRecordMode;
@@ -88,7 +88,7 @@ export function WastePage({ embedded = false }: { embedded?: boolean }) {
     const db = requireSupabase();
     const [stockResult, wasteResult, wasteReasonResult, stockOutReasonResult, stockOutResult, closingSnapshot] = await Promise.all([
       db.from('v_stock_by_batch').select('id, menu_id, menu_name, production_date, expiry_date, quantity_remaining').gt('quantity_remaining', 0).order('expiry_date'),
-      db.from('waste_records').select('id, quantity, reason, notes, waste_date, photo_url, deleted_at, production_batches(menu_name_snapshot, meat_options(name), production_date), waste_record_photos(file_path)').order('waste_date', { ascending: false }).limit(60),
+      db.from('waste_records').select('id, quantity, reason, notes, waste_date, photo_url, deleted_at, stock_ledger_preserved_on_archive, archive_review_status, production_batches(menu_name_snapshot, meat_options(name), production_date), waste_record_photos(file_path)').order('waste_date', { ascending: false }).limit(60),
       db.from('waste_reasons').select('id, name, active').eq('active', true).order('name'),
       db.from('stock_out_reasons').select('id, name, active').eq('active', true).order('name'),
       db.from('post_close_stock_outs').select('id, quantity, reason, notes, removal_date, deleted_at, production_batches(menu_name_snapshot, meat_options(name), production_date)').order('removal_date', { ascending: false }).limit(60),
@@ -139,6 +139,9 @@ export function WastePage({ embedded = false }: { embedded?: boolean }) {
   }, []);
 
   const selectedBatch = stock.find((row) => row.id === batchId);
+  const requestedQuantity = Number(quantity);
+  const selectedAvailability = Number(selectedBatch?.quantity_remaining ?? 0);
+  const quantityExceedsStock = quantity.trim() !== '' && Number.isFinite(requestedQuantity) && requestedQuantity > selectedAvailability;
   const activeReasons = mode === 'waste' ? wasteReasons : stockOutReasons;
   const selectedReasonIsOther = reason.trim().toLowerCase() === 'other';
   const previousMode = useRef(mode);
@@ -189,10 +192,26 @@ export function WastePage({ embedded = false }: { embedded?: boolean }) {
       setSaving(false); return;
     }
     const db = requireSupabase();
+    if (!selectedBatch || !Number.isInteger(requestedQuantity) || requestedQuantity < 1) {
+      setError(t('Enter a whole number of boxes above zero.')); setSaving(false); return;
+    }
+    const { data: balance, error: balanceError } = await db.from('v_stock_by_batch').select('quantity_remaining').eq('id', batchId).maybeSingle();
+    if (balanceError) { setError(t('Stock changed while you were recording. Refresh the batch and enter no more than the available quantity.')); setSaving(false); return; }
+    const currentAvailability = Number(balance?.quantity_remaining ?? 0);
+    if (!balance || requestedQuantity > currentAvailability) {
+      setStock((current) => current.filter((row) => row.id !== batchId || currentAvailability > 0).map((row) => row.id === batchId ? { ...row, quantity_remaining: currentAvailability } : row));
+      setError(!currentAvailability ? t('This batch has no stock available.') : t('Requested quantity cannot exceed the available stock.'));
+      setSaving(false); return;
+    }
     const { data, error: insertError } = await db.from('waste_records').insert({
-      production_batch_id: batchId, quantity: Number(quantity), reason, notes: notes.trim() || null,
+      production_batch_id: batchId, quantity: requestedQuantity, reason, notes: notes.trim() || null,
     }).select('id').single();
-    if (insertError) { setError(insertError.message); setSaving(false); return; }
+    if (insertError) {
+      setError(insertError.message.includes('negative stock') || insertError.message.includes('boxes remain')
+        ? t('Stock changed while you were recording. Refresh the batch and enter no more than the available quantity.')
+        : insertError.message);
+      setSaving(false); return;
+    }
     let photoError = '';
     if (photos.length) {
       try { await attachPrivatePhotos(db, 'waste', data.id, photos); }
@@ -209,16 +228,34 @@ export function WastePage({ embedded = false }: { embedded?: boolean }) {
       setError(currentDayStatus === 'unknown' ? t('Could not confirm whether today has been closed. Refresh and try again.') : t('Close this day before recording a post-close removal.'));
       setSaving(false); return;
     }
-    const { error: insertError } = await requireSupabase().from('post_close_stock_outs').insert({
-      production_batch_id: batchId, quantity: Number(quantity), reason, notes: notes.trim() || null, removal_date: removalDate,
+    const db = requireSupabase();
+    if (!selectedBatch || !Number.isInteger(requestedQuantity) || requestedQuantity < 1) {
+      setError(t('Enter a whole number of boxes above zero.')); setSaving(false); return;
+    }
+    const { data: balance, error: balanceError } = await db.from('v_stock_by_batch').select('quantity_remaining').eq('id', batchId).maybeSingle();
+    if (balanceError) { setError(t('Stock changed while you were recording. Refresh the batch and enter no more than the available quantity.')); setSaving(false); return; }
+    const currentAvailability = Number(balance?.quantity_remaining ?? 0);
+    if (!balance || requestedQuantity > currentAvailability) {
+      setStock((current) => current.filter((row) => row.id !== batchId || currentAvailability > 0).map((row) => row.id === batchId ? { ...row, quantity_remaining: currentAvailability } : row));
+      setError(!currentAvailability ? t('This batch has no stock available.') : t('Requested quantity cannot exceed the available stock.'));
+      setSaving(false); return;
+    }
+    const { error: insertError } = await db.from('post_close_stock_outs').insert({
+      production_batch_id: batchId, quantity: requestedQuantity, reason, notes: notes.trim() || null, removal_date: removalDate,
     });
-    if (insertError) setError(insertError.message);
+    if (insertError) setError(insertError.message.includes('negative stock') || insertError.message.includes('boxes remain')
+      ? t('Stock changed while you were recording. Refresh the batch and enter no more than the available quantity.')
+      : insertError.message);
     else { setSuccess(`${quantity} ${Number(quantity) === 1 ? 'box' : 'boxes'} removed from stock. It is excluded from waste totals.`); setQuantity(''); setNotes(''); clearDraft(); await load(); }
     setSaving(false);
   }
 
   async function archiveWaste(record: WasteRow) {
     if (!canEdit) return;
+    if (record.deleted_at && record.stock_ledger_preserved_on_archive) {
+      setError(t('This stock-preserving correction cannot be restored from Waste history.'));
+      return;
+    }
     if (!record.deleted_at && !window.confirm('Archive this waste record? Its boxes will be returned to the batch and the change will be audited.')) return;
     const { error: updateError } = await requireSupabase().from('waste_records').update({ deleted_at: record.deleted_at ? null : new Date().toISOString() }).eq('id', record.id);
     if (updateError) setError(updateError.message); else { setError(''); setSuccess(record.deleted_at ? 'Waste record restored.' : 'Waste record archived and stock returned.'); await load(); }
@@ -268,16 +305,16 @@ export function WastePage({ embedded = false }: { embedded?: boolean }) {
       {showWriteControls && <section className="panel workflow-form-panel"><div className="panel-head"><div><span className="eyebrow">{t(mode === 'waste' ? 'CONFIRM WHAT WAS DISCARDED' : 'RECORD FOOD LEAVING STOCK')}</span><h2>{t(mode === 'waste' ? 'What went to waste?' : 'What was taken after closing?')}</h2></div><span className={`form-panel-icon ${mode === 'waste' ? 'peach' : 'green'}`}>{mode === 'waste' ? <Trash2 size={20} /> : <PackageOpen size={20} />}</span></div>
         {busy ? <LoadingState label="Checking available batches…" /> : canEdit && currentDayStatus === 'unknown' ? <EmptyState title={t('Could not confirm day status')} detail={t('Reconnect and refresh before recording a stock change.')} /> : stock.length === 0 ? <EmptyState title="No stock to record against" detail="Once food has been produced, you can record a batch-specific stock change here." /> : mode === 'stock-out' && !latestClosedDate ? <EmptyState title="Close a day first" detail="After the first daily closing, staff can record food taken from stock without changing that closing count." /> : <form className="data-form" onSubmit={mode === 'waste' ? recordWaste : recordStockOut}>
           <label>{t('Food batch')}<select required value={batchId} disabled={!canEdit} onChange={(event) => setBatchId(event.target.value)}>{stock.map((row) => <option key={row.id} value={row.id}>{row.menu_name} · {formatBusinessDate(row.production_date)} · {row.quantity_remaining} {t('left')}</option>)}</select></label>
-          <div className="form-two-cols"><label>{t(mode === 'waste' ? 'Boxes discarded' : 'Boxes taken')}<input required type="number" min="1" max={selectedBatch?.quantity_remaining ?? 1} step="1" inputMode="numeric" placeholder={t('e.g. 2')} value={quantity} disabled={!canEdit} onChange={(event) => setQuantity(event.target.value)} /><small className="field-help">{t('Available in this batch:')} {formatQuantity(selectedBatch?.quantity_remaining ?? 0)} {t('boxes')}</small></label><label>{t('Reason')}<select required value={reason} disabled={!canEdit} onChange={(event) => setReason(event.target.value)}>{activeReasons.map((item) => <option key={item.id} value={item.name}>{t(item.name)}</option>)}</select></label></div>
+          <div className="form-two-cols"><label>{t(mode === 'waste' ? 'Boxes discarded' : 'Boxes taken')}<input required type="number" min="1" max={selectedAvailability || undefined} step="1" inputMode="numeric" placeholder={t('e.g. 2')} value={quantity} disabled={!canEdit} aria-invalid={quantityExceedsStock} onChange={(event) => setQuantity(event.target.value)} /><small className="field-help">{t('Available in this batch:')} {formatQuantity(selectedAvailability)} {t('boxes')}</small>{quantityExceedsStock && <small className="field-error" role="alert">{t('Requested quantity cannot exceed the available stock.')}</small>}</label><label>{t('Reason')}<select required value={reason} disabled={!canEdit} onChange={(event) => setReason(event.target.value)}>{activeReasons.map((item) => <option key={item.id} value={item.name}>{t(item.name)}</option>)}</select></label></div>
           {mode === 'stock-out' && <label>{t('Date removed')}<input type="date" required min={latestClosedDate ?? undefined} max={currentBusinessDate} value={removalDate} disabled={!canEdit} onChange={(event) => setRemovalDate(event.target.value)} /><small className="field-help">{t('Use today for a late pickup today. Earlier dates than the latest closing are blocked to protect completed counts.')}</small></label>}
           <label>{t('Note')} {selectedReasonIsOther ? <span className="required-label">{t('REQUIRED FOR OTHER')}</span> : <span className="optional-label">{t('OPTIONAL')}</span>}<textarea rows={2} required={selectedReasonIsOther} placeholder={t(mode === 'waste' ? 'Add context if it would help the next shift' : 'For example, owner’s friend picked up a meal box')} value={notes} disabled={!canEdit} onChange={(event) => setNotes(event.target.value)} /></label>
           {mode === 'waste' && <PhotoAttachmentsPicker files={photos} onChange={setPhotos} disabled={!canEdit} label={photos.length ? `${photos.length} ${t('photos selected')}` : t('Add photos')} hint={t('Optional · private · compressed before upload')} />}
           {canEdit && <DraftStatus status={draftStatus} photosNotSaved={mode === 'waste'} />}
-          <button className="button button-primary" disabled={!canEdit || saving || !selectedBatch || !reason || (mode === 'stock-out' && !latestClosedDate)}>{mode === 'waste' ? <Trash2 size={17} /> : <PackageOpen size={17} />}{saving ? t('Saving…') : t(mode === 'waste' ? 'Record waste' : 'Record stock removal')}</button>
+          <button className="button button-primary" disabled={!canEdit || saving || !selectedBatch || !reason || quantityExceedsStock || (mode === 'stock-out' && !latestClosedDate)}>{mode === 'waste' ? <Trash2 size={17} /> : <PackageOpen size={17} />}{saving ? t('Saving…') : t(mode === 'waste' ? 'Record waste' : 'Record stock removal')}</button>
         </form>}
       </section>}
       <section className="panel"><div className="panel-head"><div><span className="eyebrow">{t('THE STOCK RECORD')}</span><h2>{t(!showWriteControls ? mode === 'waste' ? 'Waste history' : 'After-close removals' : mode === 'waste' ? showArchived ? 'Archived waste' : 'Waste history' : showArchived ? 'Archived removals' : 'After-close removals')}</h2></div>{showWriteControls && <button className="button button-quiet button-small" onClick={() => setShowArchived(!showArchived)}>{showArchived ? <RotateCcw size={14} /> : <Archive size={14} />}{t(showArchived ? 'Show active' : 'Show archived')}</button>}</div>
-        {busy ? <LoadingState label="Loading stock records…" /> : historyEmpty ? <EmptyState title={t(showArchived ? 'Nothing archived' : mode === 'waste' ? 'No waste records yet' : 'No after-close removals')} detail={t(showArchived ? 'Archived records can be restored here.' : mode === 'waste' ? 'Food discarded by the team will appear here.' : 'Owner, friend, or guest pickups after closing will appear here, separate from actual waste.')} /> : mode === 'waste' ? <div className="waste-history-list">{visibleWaste.map((row) => <div className={`waste-history-row${row.deleted_at ? ' row-archived' : ''}`} key={row.id}><span className="waste-history-icon"><Trash2 size={16} /></span><span><strong>{formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name)}</strong><small>{t(row.reason)} · {formatBusinessDate(row.waste_date)}{row.notes ? ` · ${row.notes}` : ''}{!canEdit && row.deleted_at ? ` · ${t('Archived')}` : ''}</small>{Boolean(row.photoUrls?.length) && <div className="attachment-links">{row.photoUrls!.map((url, index) => <a href={url} key={url} target="_blank" rel="noreferrer">{t('Photo')} {index + 1}</a>)}</div>}</span><span className="waste-amount">−{formatQuantity(row.quantity)}<small>{t('boxes')}</small></span>{showWriteControls && <button className="icon-button" aria-label={t(row.deleted_at ? 'Restore waste record' : 'Archive waste record')} title={t(row.deleted_at ? 'Restore waste record' : 'Archive waste record')} disabled={!canEdit} onClick={() => void archiveWaste(row)}>{row.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}</button>}</div>)}</div> : <div className="waste-history-list">{visibleStockOuts.map((row) => <div className={`waste-history-row stock-out-history-row${row.deleted_at ? ' row-archived' : ''}`} key={row.id}><span className="waste-history-icon stock-out-history-icon"><PackageOpen size={16} /></span><span><strong>{formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name)}</strong><small>{t(row.reason)} · {formatBusinessDate(row.removal_date)}{row.notes ? ` · ${row.notes}` : ''}{!canEdit && row.deleted_at ? ` · ${t('Archived')}` : ''}</small></span><span className="waste-amount">−{formatQuantity(row.quantity)}<small>{t('boxes')}</small></span>{showWriteControls && <button className="icon-button" aria-label={t(row.deleted_at ? 'Restore stock removal' : 'Archive stock removal')} title={t(row.deleted_at ? 'Restore stock removal' : 'Archive stock removal')} disabled={!canEdit} onClick={() => void archiveStockOut(row)}>{row.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}</button>}</div>)}</div>}
+        {busy ? <LoadingState label="Loading stock records…" /> : historyEmpty ? <EmptyState title={t(showArchived ? 'Nothing archived' : mode === 'waste' ? 'No waste records yet' : 'No after-close removals')} detail={t(showArchived ? 'Archived records can be restored here.' : mode === 'waste' ? 'Food discarded by the team will appear here.' : 'Owner, friend, or guest pickups after closing will appear here, separate from actual waste.')} /> : mode === 'waste' ? <div className="waste-history-list">{visibleWaste.map((row) => <div className={`waste-history-row${row.deleted_at ? ' row-archived' : ''}`} key={row.id}><span className="waste-history-icon"><Trash2 size={16} /></span><span><strong>{formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name)}</strong><small>{t(row.reason)} · {formatBusinessDate(row.waste_date)}{row.notes ? ` · ${row.notes}` : ''}{row.archive_review_status === 'verified_waste' ? ` · ${t('Verified as waste')}` : !canEdit && row.deleted_at ? ` · ${t('Archived')}` : ''}</small>{Boolean(row.photoUrls?.length) && <div className="attachment-links">{row.photoUrls!.map((url, index) => <a href={url} key={url} target="_blank" rel="noreferrer">{t('Photo')} {index + 1}</a>)}</div>}</span><span className="waste-amount">−{formatQuantity(row.quantity)}<small>{t('boxes')}</small></span>{showWriteControls && <button className="icon-button" aria-label={t(row.deleted_at ? 'Restore waste record' : 'Archive waste record')} title={t(row.deleted_at ? 'Restore waste record' : 'Archive waste record')} disabled={!canEdit || Boolean(row.deleted_at && row.stock_ledger_preserved_on_archive)} onClick={() => void archiveWaste(row)}>{row.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}</button>}</div>)}</div> : <div className="waste-history-list">{visibleStockOuts.map((row) => <div className={`waste-history-row stock-out-history-row${row.deleted_at ? ' row-archived' : ''}`} key={row.id}><span className="waste-history-icon stock-out-history-icon"><PackageOpen size={16} /></span><span><strong>{formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name)}</strong><small>{t(row.reason)} · {formatBusinessDate(row.removal_date)}{row.notes ? ` · ${row.notes}` : ''}{!canEdit && row.deleted_at ? ` · ${t('Archived')}` : ''}</small></span><span className="waste-amount">−{formatQuantity(row.quantity)}<small>{t('boxes')}</small></span>{showWriteControls && <button className="icon-button" aria-label={t(row.deleted_at ? 'Restore stock removal' : 'Archive stock removal')} title={t(row.deleted_at ? 'Restore stock removal' : 'Archive stock removal')} disabled={!canEdit} onClick={() => void archiveStockOut(row)}>{row.deleted_at ? <RotateCcw size={15} /> : <Archive size={15} />}</button>}</div>)}</div>}
       </section>
     </div>
     <div className="stock-disclaimer"><span className="soft-chip"><span className="live-dot" /> {t('STOCK LEDGER')}</span><span>{t('Each record changes only its selected batch. Post-close removals lower current stock and stay out of the waste rate.')}</span></div>

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { addCalendarDays } from './dates';
+import { addCalendarDays, advanceIfStillCurrentDate, businessDateNow } from './dates';
+
+describe('businessDateNow', () => {
+  it('uses the Bangkok calendar date across UTC midnight boundaries', () => {
+    expect(businessDateNow(new Date('2026-10-16T16:59:00.000Z'))).toBe('2026-10-16');
+    expect(businessDateNow(new Date('2026-10-16T17:00:00.000Z'))).toBe('2026-10-17');
+  });
+});
 
 describe('addCalendarDays', () => {
   it('moves across month, year and leap-day boundaries as calendar dates', () => {
@@ -13,5 +20,16 @@ describe('addCalendarDays', () => {
     expect(addCalendarDays('2026-10-15', 3)).toBe('2026-10-18');
     expect(addCalendarDays('2026-10-15', -1)).toBe('2026-10-14');
     expect(addCalendarDays('2026-10-15', 0)).toBe('2026-10-15');
+  });
+});
+
+describe('advanceIfStillCurrentDate', () => {
+  it('moves a still-current selection to the new business date', () => {
+    expect(advanceIfStillCurrentDate('2026-10-16', '2026-10-16', '2026-10-17')).toBe('2026-10-17');
+  });
+
+  it('preserves a deliberate past date and a draft with unsaved work', () => {
+    expect(advanceIfStillCurrentDate('2026-10-15', '2026-10-16', '2026-10-17')).toBe('2026-10-15');
+    expect(advanceIfStillCurrentDate('2026-10-16', '2026-10-16', '2026-10-17', true)).toBe('2026-10-16');
   });
 });

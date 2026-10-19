@@ -3,7 +3,7 @@ import { CalendarCheck, PackageOpen, ReceiptText, Trash2, UtensilsCrossed } from
 import { Link, useSearchParams } from 'react-router-dom';
 import { Notice } from '../../components/Feedback';
 import { PageTitle } from '../../components/PageTitle';
-import { businessDateNow } from '../../lib/dates';
+import { useBusinessDate } from '../../lib/useBusinessDate';
 import { formatQuantity } from '../../lib/format';
 import { getExpiryStatus } from '../../lib/stock';
 import { useI18n } from '../../lib/i18n';
@@ -29,7 +29,7 @@ export function TodayPage() {
   const { member } = useAuth();
   const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
-  const today = businessDateNow();
+  const today = useBusinessDate();
   const [production, setProduction] = useState<ProductionRow[]>([]);
   const [waste, setWaste] = useState<WasteRow[]>([]);
   const [closing, setClosing] = useState<ClosingRow | null>(null);

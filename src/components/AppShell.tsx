@@ -8,10 +8,12 @@ import {
 import { useAuth } from '../features/auth/AuthContext';
 import type { AppRole } from '../features/auth/AuthContext';
 import { isReadOnlyDemo, roleLabels } from '../features/auth/permissions';
-import { businessDateNow, formatBusinessDate } from '../lib/dates';
+import { formatBusinessDate } from '../lib/dates';
+import { useBusinessDate } from '../lib/useBusinessDate';
 import { useI18n } from '../lib/i18n';
 import { LoadingState } from './Feedback';
 import { LanguageToggle } from './LanguageToggle';
+import { ThemeToggle } from './ThemeToggle';
 
 type NavGroupId = 'overview' | 'canteen' | 'coliving' | 'administration' | 'staff' | 'coliving-staff';
 
@@ -83,6 +85,7 @@ const workspaceByRole: Record<AppRole, { initial: string; label: string; detail:
 export function AppShell() {
   const { member, signOut } = useAuth();
   const { t } = useI18n();
+  const today = useBusinessDate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Partial<Record<NavGroupId, boolean>>>({});
@@ -162,7 +165,7 @@ export function AppShell() {
             <button className="icon-button mobile-menu-button" aria-label={t('Open navigation')} onClick={() => setMobileOpen(true)}><Menu size={20} /></button>
             <div><span className="eyebrow">{t(workspace.heading)}</span><span className="breadcrumb">{t(activeLabel)}</span></div>
           </div>
-          <div className="topbar-right"><LanguageToggle /><span className="date-pill"><CalendarCheck size={15} />{formatBusinessDate(businessDateNow())}</span><span className="topbar-divider" /><span className="topbar-user">{member?.display_name || 'Staff member'}</span><span className="topbar-avatar">{(member?.display_name || 'S').slice(0, 1).toUpperCase()}</span></div>
+          <div className="topbar-right"><LanguageToggle /><ThemeToggle /><span className="date-pill"><CalendarCheck size={15} />{formatBusinessDate(today)}</span><span className="topbar-divider" /><span className="topbar-user">{member?.display_name || 'Staff member'}</span><span className="topbar-avatar">{(member?.display_name || 'S').slice(0, 1).toUpperCase()}</span></div>
         </header>
         <div className="page-content" data-role={role} data-readonly-demo={isReadOnlyDemo(role) ? 'true' : undefined}>
           {isReadOnlyDemo(role) && <div className="readonly-demo-banner" role="status"><ShieldCheck size={18} /><span><strong>{t('WEBSITE AUDITOR · DEMO VIEW')}</strong><small>{t('All pages and action buttons are visible. Changes, uploads, and stock actions are disabled for this account.')}</small></span></div>}

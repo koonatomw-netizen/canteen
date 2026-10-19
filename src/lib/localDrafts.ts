@@ -9,6 +9,10 @@ export function useLocalDraft<T>(key: string, value: T, restore: (draft: unknown
   shouldSaveRef.current = shouldSave;
   const [readyKey, setReadyKey] = useState('');
   const [status, setStatus] = useState<DraftSaveStatus>('idle');
+  let serializedValue: string | null = null;
+  try {
+    serializedValue = JSON.stringify(value) ?? null;
+  } catch { /* Draft form values should be serializable; keep the page usable if they are not. */ }
 
   useEffect(() => {
     setStatus('idle');
@@ -24,11 +28,11 @@ export function useLocalDraft<T>(key: string, value: T, restore: (draft: unknown
   useEffect(() => {
     if (readyKey !== key) return;
     const hasContent = shouldSaveRef.current(value);
-    setStatus(hasContent ? 'saving' : 'idle');
+    setStatus(hasContent && serializedValue !== null ? 'saving' : 'idle');
     const timer = window.setTimeout(() => {
       try {
-        if (shouldSaveRef.current(value)) {
-          window.localStorage.setItem(key, JSON.stringify(value));
+        if (shouldSaveRef.current(value) && serializedValue !== null) {
+          window.localStorage.setItem(key, serializedValue);
           setStatus('saved');
         } else {
           window.localStorage.removeItem(key);
@@ -39,7 +43,7 @@ export function useLocalDraft<T>(key: string, value: T, restore: (draft: unknown
       }
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [key, value, readyKey]);
+  }, [key, serializedValue, readyKey]);
 
   const clearDraft = useCallback(() => {
     try { window.localStorage.removeItem(key); } catch { /* Saving the submitted record does not depend on local storage. */ }
