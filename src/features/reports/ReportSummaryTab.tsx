@@ -21,7 +21,7 @@ function GuideList({ rows, tone }: { rows: GuideRow[]; tone: 'less' | 'more' }) 
   const { t } = useI18n();
   return <ul className={`report-guide-list report-guide-${tone}`}>{rows.map((row) => <li key={row.label}>
     <strong>{row.label}</strong>
-    <small>{fill(t('wasted {waste} of {produced} · sold out {soldOut} of {days} days'), { waste: formatQuantity(row.waste), produced: formatQuantity(row.produced), soldOut: row.soldOutDays, days: row.stockedDays })}</small>
+    <small>{row.produced > 0 ? fill(t('wasted {waste} of {produced} · sold out {soldOut} of {days} days'), { waste: formatQuantity(row.waste), produced: formatQuantity(row.produced), soldOut: row.soldOutDays, days: row.stockedDays }) : fill(t('no production in the last 4 weeks · sold out {soldOut} of {days} days'), { soldOut: row.soldOutDays, days: row.stockedDays })}</small>
   </li>)}</ul>;
 }
 
@@ -32,6 +32,8 @@ export function ReportSummaryTab(props: {
   busy: boolean;
   reasonFilterActive: boolean;
   totalWaste: number;
+  /** Waste behind the Most wasted list (follows the waste-reason filter). */
+  rankedWasteTotal: number;
   totalProduced: number;
   chart: ReactNode;
 }) {
@@ -44,7 +46,7 @@ export function ReportSummaryTab(props: {
   return <>
     <div className="report-summary-grid">
       <section className="panel report-most-wasted">
-        <div className="panel-head"><div><span className="eyebrow">{t('MOST WASTED')}</span><h2>{t('What went to waste')}</h2><p>{props.totalProduced > 0 ? fill(t('{waste} boxes wasted out of {produced} made.'), { waste: formatQuantity(props.totalWaste), produced: formatQuantity(props.totalProduced) }) : t('Ranked by boxes thrown away.')}</p></div></div>
+        <div className="panel-head"><div><span className="eyebrow">{t('MOST WASTED')}</span><h2>{t('What went to waste')}</h2><p>{props.totalProduced > 0 ? fill(t('{waste} boxes wasted out of {produced} made.'), { waste: formatQuantity(props.rankedWasteTotal), produced: formatQuantity(props.totalProduced) }) : t('Ranked by boxes thrown away.')}</p></div></div>
         {props.busy ? <LoadingState label="Building your report…" /> : props.mostWasted.length === 0 ? <EmptyState title="Nothing was wasted in this period" detail="Great work. Wasted menus will be ranked here." /> : <ol className="report-rank-list">{props.mostWasted.map((row, index) => <li key={row.label} className={index < 3 ? 'top' : undefined}>
           <span className="report-rank-number">{index + 1}</span>
           <span className="report-rank-name"><strong>{row.label}</strong><small>{fill(t('Made {produced} · sold {sold}'), { produced: formatQuantity(row.produced), sold: formatQuantity(row.sold) })}</small></span>

@@ -1,4 +1,5 @@
 import { addCalendarDays } from './dates';
+import { formatFoodVariant } from './format';
 import { wasteRatePercent, type ReportVariantSummary } from './reportAnalysis';
 
 /** Inclusive range of Asia/Bangkok business dates (YYYY-MM-DD). */
@@ -164,7 +165,7 @@ export function classifyProductionGuide(input: { production: InsightQuantity[]; 
     let verdict: GuideLabel = 'about_right';
     if (stockedDays < GUIDE_RULES.minStockedDays) verdict = 'not_enough_data';
     else if (wastePercent !== null && wastePercent >= GUIDE_RULES.makeLessWastePercent && soldOutDays <= GUIDE_RULES.makeLessMaxSoldOutDays) verdict = 'make_less';
-    else if (soldOutDays >= GUIDE_RULES.makeMoreSoldOutShare * stockedDays && (wastePercent ?? 0) < GUIDE_RULES.makeMoreMaxWastePercent) verdict = 'could_make_more';
+    else if (soldOutDays >= GUIDE_RULES.makeMoreSoldOutShare * stockedDays && (wastePercent === null ? wasted === 0 : wastePercent < GUIDE_RULES.makeMoreMaxWastePercent)) verdict = 'could_make_more';
     return { label, verdict, stockedDays, soldOutDays, produced: made, waste: wasted, wastePercent };
   }).sort((a, b) => VERDICT_ORDER.indexOf(a.verdict) - VERDICT_ORDER.indexOf(b.verdict) || a.label.localeCompare(b.label));
 }
@@ -236,4 +237,51 @@ export function weeklyWasteTrend(input: { production: InsightQuantity[]; waste: 
     const waste = total(input.waste);
     return { ...week, produced, waste, wastePercent: wasteRatePercent(waste, produced) };
   });
+}
+
+export type RangePresetKey = 'lastWeek' | 'week' | 'last4' | 'month';
+
+export function presetRange(preset: RangePresetKey, today: string): DateRange {
+  if (preset === 'lastWeek') return lastFullWeek(today);
+  if (preset === 'last4') return lastFourFullWeeks(today);
+  if (preset === 'month') return { start: `${today.slice(0, 8)}01`, end: today };
+  return { start: mondayOf(today), end: today };
+}
+
+type ClosingBatch = { menu_name_snapshot: string; production_date: string; meat_options: { name: string } | null } | null;
+export interface ClosingLike {
+  business_date: string;
+  version: number;
+  status: string;
+  closing_batch_counts: Array<{ expected_quantity: number; physical_remaining_quantity: number; calculated_sold_quantity: number; production_batches: ClosingBatch }>;
+}
+
+/** Keeps the highest version of each business date, sorted by date. */
+export function latestClosingVersions<T extends { business_date: string; version: number }>(rows: T[]): T[] {
+  const latest = new Map<string, T>();
+  for (const row of rows) {
+    const current = latest.get(row.business_date);
+    if (!current || row.version >= current.version) latest.set(row.business_date, row);
+  }
+  return [...latest.values()].sort((a, b) => a.business_date.localeCompare(b.business_date));
+}
+
+/** Closed closings flattened into labelled counts. Pass latest versions only. */
+export function closingInsightCounts(closings: ClosingLike[]): InsightClosingCount[] {
+  return closings.filter((closing) => closing.status === 'closed').flatMap((closing) => (closing.closing_batch_counts ?? []).map((count) => {
+    const batch = count.production_batches;
+    const label = formatFoodVariant(batch?.menu_name_snapshot, batch?.meat_options?.name);
+    return {
+      date: closing.business_date,
+      label,
+      batchDate: batch?.production_date ?? null,
+      expected: Number(count.expected_quantity),
+      remaining: Number(count.physical_remaining_quantity),
+      sold: Number(count.calculated_sold_quantity),
+    };
+  }));
+}
+
+export function closedDayCount(closings: Array<{ status: string }>): number {
+  return closings.filter((closing) => closing.status === 'closed').length;
 }

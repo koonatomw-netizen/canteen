@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMenuCards, classifyProductionGuide, foodAge, weekdaySalesGrid, weeklyWasteTrend, type InsightClosingCount, type InsightQuantity, lastFourFullWeeks, lastFullWeek, mondayOf, rankMostWasted, splitFoodLabel, suggestionWindow, summarizeByMeat, trendWeeks, trendWindow } from './foodInsights';
+import { buildMenuCards, classifyProductionGuide, closingInsightCounts, closedDayCount, foodAge, latestClosingVersions, presetRange, weekdaySalesGrid, weeklyWasteTrend, type InsightClosingCount, type InsightQuantity, lastFourFullWeeks, lastFullWeek, mondayOf, rankMostWasted, splitFoodLabel, suggestionWindow, summarizeByMeat, trendWeeks, trendWindow } from './foodInsights';
 import { wasteRatePercent, type ReportVariantSummary } from './reportAnalysis';
 
 function variant(label: string, produced: number, sold: number, waste: number, currentStock = 0, extra: Partial<ReportVariantSummary> = {}): ReportVariantSummary {
@@ -187,5 +187,39 @@ describe('food age, weekday sales and weekly trend', () => {
     expect(trend[0]).toMatchObject({ start: '2026-08-31', produced: 0, waste: 2, wastePercent: null, partial: false });
     expect(trend[6]).toMatchObject({ start: '2026-10-12', produced: 10, waste: 2, wastePercent: 20 });
     expect(trend[7]).toMatchObject({ start: '2026-10-19', end: '2026-10-21', partial: true, produced: 5, waste: 0, wastePercent: 0 });
+  });
+});
+
+describe('closings and presets used by the report', () => {
+  const batch = { menu_name_snapshot: 'Green colors bowl', production_date: '2026-10-09', meat_options: { name: 'Chicken' } };
+  const closing = (version: number, status: string, remaining: number) => ({
+    business_date: '2026-10-10',
+    version,
+    status,
+    closing_batch_counts: [{ expected_quantity: 3, physical_remaining_quantity: remaining, calculated_sold_quantity: 3 - remaining, production_batches: batch }],
+  });
+
+  it('counts only the latest version of a day, and only when it is closed', () => {
+    expect(closingInsightCounts(latestClosingVersions([closing(1, 'closed', 0), closing(2, 'reopened', 0)]))).toEqual([]);
+    expect(closingInsightCounts(latestClosingVersions([closing(2, 'closed', 1), closing(1, 'closed', 0)]))).toEqual([
+      { date: '2026-10-10', label: 'Green colors bowl · Chicken', batchDate: '2026-10-09', expected: 3, remaining: 1, sold: 2 },
+    ]);
+  });
+
+  it('counts closed days in a range', () => {
+    expect(closedDayCount([closing(1, 'closed', 0), { ...closing(1, 'reopened', 0), business_date: '2026-10-11' }])).toBe(1);
+  });
+
+  it('maps each period preset to its dates', () => {
+    expect(presetRange('lastWeek', '2026-10-21')).toEqual({ start: '2026-10-12', end: '2026-10-18' });
+    expect(presetRange('week', '2026-10-21')).toEqual({ start: '2026-10-19', end: '2026-10-21' });
+    expect(presetRange('last4', '2026-10-21')).toEqual({ start: '2026-09-21', end: '2026-10-18' });
+    expect(presetRange('month', '2026-10-21')).toEqual({ start: '2026-10-01', end: '2026-10-21' });
+  });
+});
+
+describe('guide with waste but no production', () => {
+  it('never suggests making more when waste happened without production', () => {
+    expect(guide(0, 3, stockedDays(10, 5)).verdict).toBe('about_right');
   });
 });

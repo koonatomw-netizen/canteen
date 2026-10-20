@@ -17,7 +17,7 @@ import { useI18n } from '../../lib/i18n';
 import { ColivingPage } from '../coliving/ColivingPage';
 import { ArchiveReviewDialog, type ArchiveReviewTarget } from './ArchiveReviewDialog';
 import { ReportControls, type RangePreset } from './ReportControls';
-import { buildMenuCards, classifyProductionGuide, foodAge, lastFourFullWeeks, lastFullWeek, rankMostWasted, suggestionWindow, summarizeByMeat, trendWindow, weekdaySalesGrid, weeklyWasteTrend, type InsightClosingCount, type InsightQuantity } from '../../lib/foodInsights';
+import { buildMenuCards, classifyProductionGuide, closedDayCount, closingInsightCounts, foodAge, lastFullWeek, latestClosingVersions, presetRange, rankMostWasted, suggestionWindow, summarizeByMeat, trendWindow, weekdaySalesGrid, weeklyWasteTrend, type InsightClosingCount, type InsightQuantity } from '../../lib/foodInsights';
 import { ReportSummaryTab } from './ReportSummaryTab';
 import { ReportMenuCards } from './ReportMenuCards';
 import { ReportFoodAge } from './ReportFoodAge';
@@ -48,34 +48,8 @@ const REPORT_TABS: Array<{ value: ReportTab; label: string }> = [
 interface ReportHistory { production: InsightQuantity[]; waste: Array<InsightQuantity & { batchDate: string | null; reason: string }>; closings: InsightClosingCount[]; }
 const EMPTY_HISTORY: ReportHistory = { production: [], waste: [], closings: [] };
 
-function presetRange(preset: Exclude<RangePreset, 'custom'>, today: string) {
-  if (preset === 'lastWeek') return lastFullWeek(today);
-  if (preset === 'last4') return lastFourFullWeeks(today);
-  if (preset === 'month') return { start: `${today.slice(0, 8)}01`, end: today };
-  const weekday = new Date(`${today}T00:00:00.000Z`).getUTCDay();
-  return { start: addCalendarDays(today, -((weekday + 6) % 7)), end: today };
-}
 
-/** Closed, latest-version closings flattened into labelled counts. */
-function insightClosingCounts(closings: DailyClosing[]): InsightClosingCount[] {
-  return closings.filter((closing) => closing.status === 'closed').flatMap((closing) => (closing.closing_batch_counts ?? []).map((count) => ({
-    date: closing.business_date,
-    label: formatFoodVariant(count.production_batches?.menu_name_snapshot, count.production_batches?.meat_options?.name),
-    batchDate: count.production_batches?.production_date ?? null,
-    expected: Number(count.expected_quantity),
-    remaining: Number(count.physical_remaining_quantity),
-    sold: Number(count.calculated_sold_quantity),
-  })));
-}
 
-function latestClosingVersions(rows: DailyClosing[]) {
-  const latest = new Map<string, DailyClosing>();
-  for (const row of [...rows].sort((a, b) => a.version - b.version)) {
-    const current = latest.get(row.business_date);
-    if (!current || row.version >= current.version) latest.set(row.business_date, row);
-  }
-  return [...latest.values()].sort((a, b) => a.business_date.localeCompare(b.business_date));
-}
 
 function wasteLabel(row: Waste) {
   return formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name);
@@ -292,7 +266,7 @@ function CanteenReportsContent() {
       setHistoryRows({
         production: (historyProductionResult.data as unknown as Production[]).map((row) => ({ label: formatFoodVariant(row.menu_name_snapshot, row.meat_options?.name), date: row.production_date, quantity: Number(row.quantity_produced) })),
         waste: historyWaste.map((row) => ({ label: wasteLabel(row), date: row.waste_date, quantity: Number(row.quantity), batchDate: row.production_batches?.production_date ?? null, reason: row.reason })),
-        closings: insightClosingCounts(latestClosingVersions(historyClosingResult.data as unknown as DailyClosing[])),
+        closings: closingInsightCounts(latestClosingVersions(historyClosingResult.data as unknown as DailyClosing[])),
       });
       setBusy(false);
     }
@@ -436,7 +410,7 @@ function CanteenReportsContent() {
   const wasteRateChange = rateDifference === null ? '' : ` · ${rateDifference > 0 ? '+' : rateDifference < 0 ? '−' : ''}${Math.round(Math.abs(rateDifference))} ${t('percentage points')}`;
   const keyMetrics = [
     { label: 'PRODUCED', icon: UtensilsCrossed, tone: 'report-metric-green', display: formatQuantity(totalProduced), unit: 'boxes', currency: false, change: changeText(totalProduced, previousProduced, formatQuantity) },
-    { label: 'SOLD', icon: CalendarRange, tone: 'report-metric-lilac', display: formatQuantity(totalSold), unit: 'boxes', currency: false, change: changeText(totalSold, previousSold, formatQuantity) },
+    { label: 'SOLD', icon: CalendarRange, tone: 'report-metric-lilac', display: formatQuantity(totalSold), unit: 'boxes', currency: false, change: `${closedDayCount(filteredClosings)} ${t('days closed in this range')} · ${changeText(totalSold, previousSold, formatQuantity)}` },
     { label: 'WASTE', icon: Trash2, tone: 'report-metric-peach', display: `${formatQuantity(foodWasteTotal)}${foodWasteRate === null ? '' : ` · ${Math.round(foodWasteRate)}%`}`, unit: 'boxes', currency: false, change: `${changeText(foodWasteTotal, previousFoodWasteTotal, formatQuantity)}${wasteRateChange}` },
     ...(canViewExpenses ? [{ label: 'EXPENSES', icon: ReceiptText, tone: 'report-metric-blue', display: formatBaht(totalExpenses), unit: '', currency: true, change: changeText(totalExpenses, previousExpensesTotal, formatBaht) }] : []),
   ];
@@ -462,7 +436,7 @@ function CanteenReportsContent() {
   // Food age follows the waste-reason filter; trends and weekday sales use food filters only.
   const foodAgeData = foodAge({
     waste: filteredWaste.map((row) => ({ wasteDate: row.waste_date, batchDate: row.production_batches?.production_date ?? null, quantity: Number(row.quantity) })),
-    closings: insightClosingCounts(filteredClosings),
+    closings: closingInsightCounts(filteredClosings),
   });
   const weekdayRows = weekdaySalesGrid(history.closings, suggestionWindow(end));
   const wasteTrend = weeklyWasteTrend({ production: history.production, waste: history.waste, end });
@@ -535,7 +509,7 @@ function CanteenReportsContent() {
 
     <div className="report-tabs" role="tablist" aria-label={t('Report sections')}>{visibleTabs.map((item) => <button key={item.value} type="button" role="tab" id={`report-tab-${item.value}`} aria-selected={tab === item.value} aria-controls={`report-panel-${item.value}`} className={tab === item.value ? 'active' : ''} onClick={() => selectTab(item.value)}>{t(item.label)}</button>)}</div>
     <div className="report-tab-panel" role="tabpanel" id={`report-panel-${tab}`} aria-labelledby={`report-tab-${tab}`}>
-    {tab === 'summary' && <ReportSummaryTab mostWasted={mostWasted} meat={meatSummary} guide={productionGuide} busy={busy} reasonFilterActive={Boolean(wasteReasonFilter)} totalWaste={foodWasteTotal} totalProduced={totalProduced} chart={<>
+    {tab === 'summary' && <ReportSummaryTab mostWasted={mostWasted} meat={meatSummary} guide={productionGuide} busy={busy} reasonFilterActive={Boolean(wasteReasonFilter)} totalWaste={foodWasteTotal} rankedWasteTotal={totalWaste} totalProduced={totalProduced} chart={<>
       <section className="panel report-chart-panel"><div className="panel-head"><div><span className="eyebrow">{t('A GOOD WAY TO SEE A TREND')}</span><h2>{t('Production, sold & waste')}</h2></div><span className="chart-legend"><i className="legend-produced" /> {t('Produced')} <i className="legend-sold" /> {t('Sold')} <i className="legend-waste" /> {t('Waste')}</span></div>
         {busy ? <LoadingState label="Building your report…" /> : !totalProduced && !totalWaste && !totalSold ? <EmptyState title="Your chart will grow here" detail="A few days of records make trends easier to spot." /> : <div className="bar-chart" role="img" aria-label="Production, inferred sales and waste across the selected date range">{daily.map((day) => <div className="bar-day" key={day.start} title={`${formatDate(day.start)}${day.start === day.end ? '' : ` – ${formatDate(day.end)}`}: ${day.produced} produced, ${day.sold} inferred sold, ${day.waste} waste`}><div className="bar-pair"><span className="bar bar-produced" style={{ height: `${Math.max(3, day.produced / maxQuantity * 100)}%` }} /><span className="bar bar-sold" style={{ height: `${Math.max(3, day.sold / maxQuantity * 100)}%` }} /><span className="bar bar-waste" style={{ height: `${Math.max(3, day.waste / maxQuantity * 100)}%` }} /></div><small>{day.end.slice(-2)}</small></div>)}</div>}
         <div className="chart-caption"><span>{t('BOXES PER DAY')}</span><span>{formatDate(start)} – {formatDate(end)}</span></div>

@@ -521,6 +521,7 @@ const thai: Record<string, string> = {
   "Average boxes sold on days the option was on offer. Darker means more.": "จำนวนกล่องที่ขายเฉลี่ยในวันที่มีขาย สีเข้มคือขายได้มาก",
   "No closed days yet": "ยังไม่มีวันที่ปิดยอด",
   "Weekday sales appear after daily closing is completed.": "ยอดขายตามวันจะแสดงหลังปิดยอดประจำวัน",
+  "no production in the last 4 weeks · sold out {soldOut} of {days} days": "ไม่มีการผลิตใน 4 สัปดาห์ล่าสุด · ขายหมด {soldOut} จาก {days} วัน",
 };
 
 function readLanguage(): Language {
