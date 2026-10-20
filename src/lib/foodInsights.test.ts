@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMenuCards, classifyProductionGuide, type InsightClosingCount, type InsightQuantity, lastFourFullWeeks, lastFullWeek, mondayOf, rankMostWasted, splitFoodLabel, suggestionWindow, summarizeByMeat, trendWeeks, trendWindow } from './foodInsights';
+import { buildMenuCards, classifyProductionGuide, foodAge, weekdaySalesGrid, weeklyWasteTrend, type InsightClosingCount, type InsightQuantity, lastFourFullWeeks, lastFullWeek, mondayOf, rankMostWasted, splitFoodLabel, suggestionWindow, summarizeByMeat, trendWeeks, trendWindow } from './foodInsights';
 import { wasteRatePercent, type ReportVariantSummary } from './reportAnalysis';
 
 function variant(label: string, produced: number, sold: number, waste: number, currentStock = 0, extra: Partial<ReportVariantSummary> = {}): ReportVariantSummary {
@@ -150,5 +150,42 @@ describe('make more / make less guide', () => {
     expect(rows.map((row) => [row.label, row.verdict])).toEqual([
       ['C · Beef', 'make_less'], ['B · Beef', 'could_make_more'], ['A · Beef', 'about_right'], ['D · Beef', 'not_enough_data'],
     ]);
+  });
+});
+
+describe('food age, weekday sales and weekly trend', () => {
+  it('groups waste and sales by the age of the batch', () => {
+    const age = foodAge({
+      waste: [
+        { wasteDate: '2026-10-15', batchDate: '2026-10-15', quantity: 1 },
+        { wasteDate: '2026-10-18', batchDate: '2026-10-15', quantity: 3 },
+        { wasteDate: '2026-10-18', batchDate: null, quantity: 1 },
+        { wasteDate: '2026-10-14', batchDate: '2026-10-15', quantity: 2 },
+      ],
+      closings: [{ date: '2026-10-17', label: LABEL, batchDate: '2026-10-16', expected: 5, remaining: 2, sold: 3 }],
+    });
+    expect(age.waste).toEqual({ day0: 1, day1: 0, day2: 0, day3plus: 3 });
+    expect(age.unknownWaste).toBe(3);
+    expect(age.dominantWasteBucket).toBe('day3plus');
+    expect(age.sold).toEqual({ day0: 0, day1: 3, day2: 0, day3plus: 0 });
+    expect(foodAge({ waste: [], closings: [] }).dominantWasteBucket).toBeNull();
+  });
+
+  it('averages sales per weekday over the days the option was stocked', () => {
+    const count = (date: string, sold: number, expected = 5): InsightClosingCount => ({ date, label: LABEL, batchDate: date, expected, remaining: expected - sold, sold });
+    const grid = weekdaySalesGrid([count('2026-10-05', 2), count('2026-10-12', 4), count('2026-09-28', 0, 0), count('2026-10-14', 1)], WINDOW);
+    expect(grid).toEqual([{ label: LABEL, averages: [3, null, 1, null, null, null, null] }]);
+  });
+
+  it('builds eight weekly waste rates with a partial final week', () => {
+    const trend = weeklyWasteTrend({
+      production: [quantity(10, LABEL, '2026-10-13'), quantity(5, LABEL, '2026-10-20')],
+      waste: [quantity(2, LABEL, '2026-10-14'), quantity(2, LABEL, '2026-09-02'), quantity(9, LABEL, '2026-10-22')],
+      end: '2026-10-21',
+    });
+    expect(trend).toHaveLength(8);
+    expect(trend[0]).toMatchObject({ start: '2026-08-31', produced: 0, waste: 2, wastePercent: null, partial: false });
+    expect(trend[6]).toMatchObject({ start: '2026-10-12', produced: 10, waste: 2, wastePercent: 20 });
+    expect(trend[7]).toMatchObject({ start: '2026-10-19', end: '2026-10-21', partial: true, produced: 5, waste: 0, wastePercent: 0 });
   });
 });

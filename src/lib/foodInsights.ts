@@ -168,3 +168,72 @@ export function classifyProductionGuide(input: { production: InsightQuantity[]; 
     return { label, verdict, stockedDays, soldOutDays, produced: made, waste: wasted, wastePercent };
   }).sort((a, b) => VERDICT_ORDER.indexOf(a.verdict) - VERDICT_ORDER.indexOf(b.verdict) || a.label.localeCompare(b.label));
 }
+
+export type AgeBucket = 'day0' | 'day1' | 'day2' | 'day3plus';
+const AGE_BUCKETS: AgeBucket[] = ['day0', 'day1', 'day2', 'day3plus'];
+
+function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00.000Z`) - Date.parse(`${from}T00:00:00.000Z`)) / 86_400_000);
+}
+
+function emptyAges(): Record<AgeBucket, number> {
+  return { day0: 0, day1: 0, day2: 0, day3plus: 0 };
+}
+
+function ageBucket(days: number): AgeBucket {
+  return days >= 3 ? 'day3plus' : AGE_BUCKETS[days];
+}
+
+export function foodAge(input: { waste: Array<{ wasteDate: string; batchDate: string | null; quantity: number }>; closings: InsightClosingCount[] }) {
+  const waste = emptyAges();
+  const sold = emptyAges();
+  let unknownWaste = 0;
+  for (const row of input.waste) {
+    const days = row.batchDate ? daysBetween(row.batchDate, row.wasteDate) : -1;
+    if (days < 0) unknownWaste += Number(row.quantity) || 0;
+    else waste[ageBucket(days)] += Number(row.quantity) || 0;
+  }
+  for (const count of input.closings) {
+    const days = count.batchDate ? daysBetween(count.batchDate, count.date) : -1;
+    if (days >= 0) sold[ageBucket(days)] += Number(count.sold) || 0;
+  }
+  const dominantWasteBucket = AGE_BUCKETS.reduce<AgeBucket | null>((best, bucket) => waste[bucket] > 0 && (!best || waste[bucket] > waste[best]) ? bucket : best, null);
+  return { waste, sold, unknownWaste, dominantWasteBucket };
+}
+
+/** Monday = 0 … Sunday = 6. */
+function weekdayIndex(date: string): number {
+  return (new Date(`${date}T00:00:00.000Z`).getUTCDay() + 6) % 7;
+}
+
+export function weekdaySalesGrid(closings: InsightClosingCount[], window: DateRange): Array<{ label: string; averages: Array<number | null> }> {
+  const byLabelDate = new Map<string, Map<string, { expected: number; sold: number }>>();
+  for (const count of closings) {
+    if (!inRange(count.date, window)) continue;
+    const days = byLabelDate.get(count.label) ?? new Map<string, { expected: number; sold: number }>();
+    const day = days.get(count.date) ?? { expected: 0, sold: 0 };
+    day.expected += Number(count.expected) || 0;
+    day.sold += Number(count.sold) || 0;
+    days.set(count.date, day);
+    byLabelDate.set(count.label, days);
+  }
+  return [...byLabelDate.entries()].map(([label, days]) => {
+    const totals = Array.from({ length: 7 }, () => ({ sold: 0, days: 0 }));
+    for (const [date, day] of days) {
+      if (day.expected <= 0) continue;
+      const slot = totals[weekdayIndex(date)];
+      slot.sold += day.sold;
+      slot.days += 1;
+    }
+    return { label, averages: totals.map((slot) => slot.days ? slot.sold / slot.days : null) };
+  }).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export function weeklyWasteTrend(input: { production: InsightQuantity[]; waste: InsightQuantity[]; end: string }) {
+  return trendWeeks(input.end).map((week) => {
+    const total = (rows: InsightQuantity[]) => rows.reduce((sum, row) => inRange(row.date, week) ? sum + (Number(row.quantity) || 0) : sum, 0);
+    const produced = total(input.production);
+    const waste = total(input.waste);
+    return { ...week, produced, waste, wastePercent: wasteRatePercent(waste, produced) };
+  });
+}
