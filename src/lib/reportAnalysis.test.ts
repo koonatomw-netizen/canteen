@@ -37,18 +37,19 @@ describe('report analysis helpers', () => {
     expect(removed).toEqual({ beforeArchivedEffects: 21, afterArchivedEffects: 0 });
   });
 
-  it('aggregates production, inferred sold, confirmed waste, unverified and removed stock effects by menu variant', () => {
+  it('aggregates production, closing corrections, inferred sold, confirmed waste, unverified and removed stock effects by menu variant', () => {
     const summary = aggregateVariantSummary({
       production: [{ label: 'Hummus · Beef', quantity: 4 }, { label: 'Hummus · Beef', quantity: 2 }],
+      adjustment: [{ label: 'Hummus · Beef', quantity: 1 }],
       sold: [{ label: 'Hummus · Beef', quantity: 3 }],
       waste: [{ label: 'Hummus · Beef', quantity: 1 }],
       archivedDeduction: [{ label: 'Hummus · Beef', quantity: 2 }],
       removedArchivedEffect: [{ label: 'Hummus · Beef', quantity: 3 }],
       stock: [{ label: 'Hummus · Beef', quantity: 2 }, { label: 'Rice', quantity: 5 }],
     });
-    expect(summary[0]).toMatchObject({ label: 'Hummus · Beef', produced: 6, sold: 3, waste: 1, archivedDeduction: 2, removedArchivedEffect: 3, currentStock: 2 });
+    expect(summary[0]).toMatchObject({ label: 'Hummus · Beef', produced: 6, adjustment: 1, sold: 3, waste: 1, archivedDeduction: 2, removedArchivedEffect: 3, currentStock: 2 });
     expect(summary[0]!.wasteRate).toBeCloseTo(100 / 6);
-    expect(summary[1]).toEqual({ label: 'Rice', produced: 0, sold: 0, waste: 0, archivedDeduction: 0, removedArchivedEffect: 0, currentStock: 5, wasteRate: null });
+    expect(summary[1]).toEqual({ label: 'Rice', produced: 0, adjustment: 0, sold: 0, waste: 0, archivedDeduction: 0, removedArchivedEffect: 0, currentStock: 5, wasteRate: null });
   });
 
   it('matches menu and meat filters against formatted variant labels', () => {

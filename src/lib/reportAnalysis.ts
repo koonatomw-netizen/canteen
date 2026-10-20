@@ -3,6 +3,7 @@ import { addCalendarDays } from './dates';
 export interface ReportVariantSummary {
   label: string;
   produced: number;
+  adjustment: number;
   sold: number;
   waste: number;
   archivedDeduction: number;
@@ -60,6 +61,7 @@ export function matchesFoodSearch(label: string, query: string): boolean {
 
 export function aggregateVariantSummary(input: {
   production: VariantQuantity[];
+  adjustment?: VariantQuantity[];
   sold: VariantQuantity[];
   waste: VariantQuantity[];
   archivedDeduction?: VariantQuantity[];
@@ -67,14 +69,15 @@ export function aggregateVariantSummary(input: {
   stock: VariantQuantity[];
 }): ReportVariantSummary[] {
   const byLabel = new Map<string, Omit<ReportVariantSummary, 'wasteRate'>>();
-  const add = (items: VariantQuantity[], field: 'produced' | 'sold' | 'waste' | 'archivedDeduction' | 'removedArchivedEffect' | 'currentStock') => {
+  const add = (items: VariantQuantity[], field: 'produced' | 'adjustment' | 'sold' | 'waste' | 'archivedDeduction' | 'removedArchivedEffect' | 'currentStock') => {
     for (const item of items) {
-      const row = byLabel.get(item.label) ?? { label: item.label, produced: 0, sold: 0, waste: 0, archivedDeduction: 0, removedArchivedEffect: 0, currentStock: 0 };
+      const row = byLabel.get(item.label) ?? { label: item.label, produced: 0, adjustment: 0, sold: 0, waste: 0, archivedDeduction: 0, removedArchivedEffect: 0, currentStock: 0 };
       row[field] += Number(item.quantity) || 0;
       byLabel.set(item.label, row);
     }
   };
   add(input.production, 'produced');
+  add(input.adjustment ?? [], 'adjustment');
   add(input.sold, 'sold');
   add(input.waste, 'waste');
   add(input.archivedDeduction ?? [], 'archivedDeduction');

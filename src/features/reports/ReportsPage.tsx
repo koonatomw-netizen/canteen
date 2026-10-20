@@ -62,6 +62,15 @@ function soldVariantQuantities(closings: DailyClosing[]): VariantQuantity[] {
     : []);
 }
 
+function adjustmentVariantQuantities(closings: DailyClosing[]): VariantQuantity[] {
+  return closings.flatMap((closing) => closing.status === 'closed'
+    ? (closing.closing_batch_counts ?? []).map((count) => ({
+      label: formatFoodVariant(count.production_batches?.menu_name_snapshot, count.production_batches?.meat_options?.name),
+      quantity: Number(count.stock_adjustment_quantity),
+    }))
+    : []);
+}
+
 function selectedFood(label: string, menu: string, meat: string) {
   return matchesFoodFilters(label, menu, meat);
 }
@@ -259,10 +268,12 @@ function CanteenReportsContent() {
     closing_batch_counts: (closing.closing_batch_counts ?? []).filter((count) => matchesSelectedFood(formatFoodVariant(count.production_batches?.menu_name_snapshot, count.production_batches?.meat_options?.name))),
   }));
   const closingSold = soldVariantQuantities(filteredClosings);
+  const closingAdjustments = adjustmentVariantQuantities(filteredClosings);
   const totalProduced = sumQuantity(filteredProduction.map((row) => ({ quantity: Number(row.quantity_produced) })));
   const totalWaste = sumQuantity(filteredWaste);
   const totalArchivedStockDeduction = sumQuantity(filteredPendingArchiveEffects);
   const totalRemovedArchiveEffect = sumQuantity(filteredRemovedArchiveEffects);
+  const totalRetainedArchiveEffect = totalArchivedStockDeduction + totalRemovedArchiveEffect;
   const totalStockOut = sumQuantity(filteredStockOuts);
   const totalExpenses = filteredExpenses.reduce((sum, row) => sum + Number(row.amount_thb), 0);
   const availableStock = filteredStock.filter((row) => Number(row.quantity_remaining) > 0);
@@ -277,7 +288,7 @@ function CanteenReportsContent() {
     closingAdditions: totalClosingAdditions,
     sold: totalSold,
     activeWaste: totalWaste,
-    archivedStockEffect: totalArchivedStockDeduction + totalRemovedArchiveEffect,
+    archivedStockEffect: totalRetainedArchiveEffect,
     afterClose: totalStockOut,
     currentStock: currentNetStock,
   });
@@ -324,9 +335,10 @@ function CanteenReportsContent() {
   const maxExpense = Math.max(1, ...daily.map((row) => row.expenses));
   const variantSummary = aggregateVariantSummary({
     production: filteredProduction.map((row) => ({ label: filterLabel(row), quantity: Number(row.quantity_produced) })),
+    adjustment: closingAdjustments,
     sold: closingSold,
     waste: filteredWaste.map((row) => ({ label: wasteLabel(row), quantity: Number(row.quantity) })),
-    archivedDeduction: filteredArchivedStockDeductions.map((row) => ({ label: formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name), quantity: Number(row.quantity) })),
+    archivedDeduction: filteredPendingArchiveEffects.map((row) => ({ label: formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name), quantity: Number(row.quantity) })),
     removedArchivedEffect: filteredRemovedArchiveEffects.map((row) => ({ label: formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name), quantity: Number(row.quantity) })),
     stock: filteredStock.map((row) => ({ label: row.menu_name, quantity: Number(row.quantity_remaining) })),
   });
@@ -349,10 +361,10 @@ function CanteenReportsContent() {
     ...(canViewExpenses ? [{ label: 'Expenses', icon: ReceiptText, rows: filteredExpenses.map((row) => ({ date: row.expense_date, store: row.stores?.name ?? '', category: row.expense_categories?.name ?? '', amount_thb: row.amount_thb, notes: row.notes })) }] : []),
     { label: 'Production', icon: UtensilsCrossed, rows: filteredProduction.map((row) => ({ date: row.production_date, menu: formatFoodVariant(row.menu_name_snapshot, row.meat_options?.name), quantity: row.quantity_produced, expiry_date: row.expiry_date })) },
     { label: 'Waste', icon: Trash2, rows: filteredWaste.map((row) => ({ date: row.waste_date, menu: wasteLabel(row), quantity: row.quantity, reason: row.reason, notes: row.notes })) },
-    { label: 'Archived stock effect (unverified)', icon: Archive, rows: filteredArchivedStockDeductions.map((row) => ({ waste_date: row.waste_date, menu: formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name), batch_date: row.production_batches?.production_date ?? '', quantity: row.quantity, reason: row.reason, original_note: row.notes ?? '', recorded_by: row.created_by_name ?? '', archived_at: row.deleted_at, stock_deduction_retained: row.stock_ledger_preserved_on_archive })) },
+    { label: 'Archived stock effect (unverified)', icon: Archive, rows: filteredPendingArchiveEffects.map((row) => ({ waste_date: row.waste_date, menu: formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name), batch_date: row.production_batches?.production_date ?? '', quantity: row.quantity, reason: row.reason, original_note: row.notes ?? '', recorded_by: row.created_by_name ?? '', archived_at: row.deleted_at, stock_deduction_retained: row.stock_ledger_preserved_on_archive })) },
     { label: 'After-close stock out', icon: PackageOpen, rows: filteredStockOuts.map((row) => ({ date: row.removal_date, menu: formatFoodVariant(row.production_batches?.menu_name_snapshot, row.production_batches?.meat_options?.name), batch_date: row.production_batches?.production_date, quantity: row.quantity, reason: row.reason, notes: row.notes })) },
     { label: 'Stock', icon: BarChart3, rows: filteredStock.map((row) => ({ menu: row.menu_name, production_date: row.production_date, expiry_date: row.expiry_date, remaining_quantity: row.quantity_remaining })) },
-    { label: 'Menu analysis', icon: BarChart3, rows: variantSummary.map((row) => ({ menu_variant: row.label, produced: row.produced, inferred_sold: row.sold, waste: row.waste, archived_stock_effect_unverified: row.archivedDeduction, waste_percent: row.wasteRate === null ? '' : Math.round(row.wasteRate), current_stock: row.currentStock })) },
+    { label: 'Menu analysis', icon: BarChart3, rows: variantSummary.map((row) => ({ menu_variant: row.label, produced: row.produced, stock_correction: row.adjustment, inferred_sold: row.sold, waste: row.waste, pending_archive_stock_effect: row.archivedDeduction, removed_stock_effect_retained: row.removedArchivedEffect, total_retained_archive_stock_effect: row.archivedDeduction + row.removedArchivedEffect, waste_percent: row.wasteRate === null ? '' : Math.round(row.wasteRate), current_stock: row.currentStock })) },
     { label: 'Activity', icon: CalendarRange, rows: activity.map((row) => ({ occurred_at: row.occurred_at, action: row.action, entity_type: row.entity_type, description: row.description })) },
     { label: 'Daily closing', icon: CalendarRange, rows: filteredClosings.flatMap((day) => day.closing_batch_counts.map((count) => ({ business_date: day.business_date, closing_version: day.version, status: day.status, batch_id: count.production_batch_id, expected: count.expected_quantity, physical_remaining: count.physical_remaining_quantity, inferred_sold: count.calculated_sold_quantity, adjustment: count.stock_adjustment_quantity, adjustment_reason: count.adjustment_reason, note: day.note }))) },
   ];
@@ -437,11 +449,11 @@ function CanteenReportsContent() {
       <article className="report-metric report-metric-lilac"><span><BarChart3 size={17} /> {t('STOCK ON HAND')}</span><strong>{busy ? '—' : formatQuantity(stockOnHand)}<small>{t('boxes')}</small></strong><p>{availableStock.length} {t('active batches today')}</p></article>
       <article className="report-metric report-metric-peach"><span><CalendarRange size={17} /> {t('EXPIRED STOCK')}</span><strong>{busy ? '—' : formatQuantity(expiredStock)}<small>{t('boxes')}</small></strong><p>{t('Current stock past its expiry date')}</p></article>
     </section>
-    {!busy && totalArchivedStockDeduction > 0 && <div className="notice notice-info report-preserved-stock-note" role="status"><Archive size={17} aria-hidden="true" /><span><strong>{t('Archived stock effect (unverified)')}: −{formatQuantity(totalArchivedStockDeduction)} {t('boxes')}</strong> · {t('Archived rows are not included in Produced or confirmed Waste. Their previous stock deductions remain, so review this amount separately.')}</span></div>}
+    {!busy && totalRetainedArchiveEffect > 0 && <div className="notice notice-info report-preserved-stock-note" role="status"><Archive size={17} aria-hidden="true" /><span><strong>{t('Retained archived stock effect')}: −{formatQuantity(totalRetainedArchiveEffect)} {t('boxes')}</strong><small>{t('Pending effect')}: −{formatQuantity(totalArchivedStockDeduction)} {t('boxes')} · {t('Removed effect retained')}: −{formatQuantity(totalRemovedArchiveEffect)} {t('boxes')} · {t('Not included in Produced or confirmed Waste')}</small></span></div>}
     {!busy && negativeStock.length > 0 && <div className="notice notice-error report-stock-integrity" role="alert"><TriangleAlert size={18} aria-hidden="true" /><span><strong>{t('Stock ledger needs review')}</strong> · {negativeStock.length} {t('negative stock batches')}: {negativeStock.map((row) => `${row.menu_name} (${formatQuantity(Number(row.quantity_remaining))} ${t('boxes')})`).join(', ')}</span></div>}
 
-    {!busy && end === today && !wasteReasonFilter && <section className="panel report-reconciliation"><div className="panel-head"><div><span className="eyebrow">{t('CURRENT STOCK CHECK')}</span><h2>{t('Stock balance check')}</h2><p>{t('Produced includes active production only. The archive effect is shown separately and is not confirmed production or food waste.')}</p></div><span className={`count-chip${totalArchivedStockDeduction > 0 || stockReconciliation.afterArchivedEffects !== 0 ? ' report-reconciliation-review' : ''}`}>{totalArchivedStockDeduction > 0 ? `${t('Archive effect to review')}: ${formatQuantity(totalArchivedStockDeduction)} ${t('boxes')}` : `${formatQuantity(stockReconciliation.afterArchivedEffects)} ${t('boxes')} · ${t('opening stock / other difference')}`}</span></div>
-      <div className="report-reconciliation-grid"><div><span>{t('Balance before archived effects')}</span><strong>{formatQuantity(stockReconciliation.beforeArchivedEffects)} {t('boxes')}</strong><small>{t('Production + closing additions − sold − active waste − after-close − current stock')}</small></div><div><span>{t('Archived stock effect (unverified)')}</span><strong>−{formatQuantity(totalArchivedStockDeduction)} {t('boxes')}</strong><small>{t('Not included in Produced or confirmed Waste')}</small></div><div><span>{t('Arithmetic remainder after archived effect')}</span><strong>{formatQuantity(stockReconciliation.afterArchivedEffects)} {t('boxes')}</strong><small>{t('This arithmetic is not proof that archived entries were correct; current stock is live and may include opening stock.')}</small></div></div>
+    {!busy && end === today && !wasteReasonFilter && <section className="panel report-reconciliation"><div className="panel-head"><div><span className="eyebrow">{t('CURRENT STOCK CHECK')}</span><h2>{t('Stock balance check')}</h2><p>{t('Produced includes active production only. The archive effect is shown separately and is not confirmed production or food waste.')}</p></div><span className={`count-chip${totalRetainedArchiveEffect > 0 || stockReconciliation.afterArchivedEffects !== 0 ? ' report-reconciliation-review' : ''}`}>{totalRetainedArchiveEffect > 0 ? `${t('Retained archived stock effect')}: ${formatQuantity(totalRetainedArchiveEffect)} ${t('boxes')}` : `${formatQuantity(stockReconciliation.afterArchivedEffects)} ${t('boxes')} · ${t('opening stock / other difference')}`}</span></div>
+      <div className="report-reconciliation-grid"><div><span>{t('Balance before archived effects')}</span><strong>{formatQuantity(stockReconciliation.beforeArchivedEffects)} {t('boxes')}</strong><small>{t('Production + closing additions − sold − active waste − after-close − current stock')}</small></div><div><span>{t('Retained archived stock effect')}</span><strong>−{formatQuantity(totalRetainedArchiveEffect)} {t('boxes')}</strong><small>{t('Pending effect')}: −{formatQuantity(totalArchivedStockDeduction)} · {t('Removed effect retained')}: −{formatQuantity(totalRemovedArchiveEffect)} · {t('Not included in Produced or confirmed Waste')}</small></div><div><span>{t('Arithmetic remainder after archived effect')}</span><strong>{formatQuantity(stockReconciliation.afterArchivedEffects)} {t('boxes')}</strong><small>{t('This arithmetic is not proof that archived entries were correct; current stock is live and may include opening stock.')}</small></div></div>
     </section>}
 
     <section className="panel report-comparison"><div className="panel-head"><div><span className="eyebrow">{t('PERIOD OVER PERIOD')}</span><h2>{t('Compared with the previous period')}</h2><p>{t('The previous period has the same number of days, with the same filters.')}</p></div></div>
@@ -460,7 +472,7 @@ function CanteenReportsContent() {
     </div>
 
     <section className="panel report-table-panel"><div className="panel-head"><div><span className="eyebrow">{t('MENU AND MEAT BREAKDOWN')}</span><h2>{t('Where each box went')}</h2><p>{t('Waste rate is waste divided by production for the selected menu and meat option.')}</p></div><span className="count-chip">{variantSummary.length} {t('menu variants')}</span></div>
-      {busy ? <LoadingState label="Building your report…" /> : variantSummary.length === 0 ? <EmptyState title="No food records in this range" detail="Try a different date range or clear some filters." /> : <div className="report-table-wrap"><table className="report-data-table"><thead><tr><th>{t('Menu / meat')}</th><th>{t('Produced')}</th><th>{t('Sold')}</th><th>{t('Waste')}</th><th>{t('Archived stock effect (unverified)')}</th><th>{t('Waste %')}</th><th>{t('Current stock')}</th></tr></thead><tbody>{variantSummary.map((row) => <tr key={row.label} className={row.currentStock < 0 ? 'report-negative-stock-row' : undefined}><th scope="row">{row.label}</th><td>{formatQuantity(row.produced)}</td><td>{formatQuantity(row.sold)}</td><td>{formatQuantity(row.waste)}</td><td>{row.archivedDeduction ? `−${formatQuantity(row.archivedDeduction)}` : '—'}</td><td>{row.wasteRate === null ? '—' : `${Math.round(row.wasteRate)}%`}</td><td>{formatQuantity(row.currentStock)}</td></tr>)}</tbody></table></div>}
+      {busy ? <LoadingState label="Building your report…" /> : variantSummary.length === 0 ? <EmptyState title="No food records in this range" detail="Try a different date range or clear some filters." /> : <div className="report-table-wrap"><table className="report-data-table"><thead><tr><th>{t('Menu / meat')}</th><th>{t('Produced')}</th><th>{t('Stock correction')}</th><th>{t('Sold')}</th><th>{t('Waste')}</th><th>{t('Retained archived stock effect')}</th><th>{t('Waste %')}</th><th>{t('Current stock')}</th></tr></thead><tbody>{variantSummary.map((row) => <tr key={row.label} className={row.currentStock < 0 ? 'report-negative-stock-row' : undefined}><th scope="row">{row.label}</th><td>{formatQuantity(row.produced)}</td><td>{row.adjustment ? `+${formatQuantity(row.adjustment)}` : '—'}</td><td>{formatQuantity(row.sold)}</td><td>{formatQuantity(row.waste)}</td><td>{row.archivedDeduction + row.removedArchivedEffect ? `−${formatQuantity(row.archivedDeduction + row.removedArchivedEffect)}` : '—'}</td><td>{row.wasteRate === null ? '—' : `${Math.round(row.wasteRate)}%`}</td><td>{formatQuantity(row.currentStock)}</td></tr>)}</tbody></table></div>}
     </section>
 
     {filteredArchivedStockDeductions.length > 0 && <section className="panel report-record-panel report-archived-stock-panel"><div className="panel-head"><div><span className="eyebrow">{t('STOCK HISTORY')}</span><h2>{t('Archived entries with stock effects')}</h2><p>{t('These rows are excluded from Produced and active Waste. Their stock movements remain; treat this quantity as unverified.')}</p></div><span className="count-chip">{filteredPendingArchiveEffects.length} {t('pending records')} · −{formatQuantity(totalArchivedStockDeduction)} {t('boxes')}</span></div>
