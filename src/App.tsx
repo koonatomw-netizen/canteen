@@ -29,6 +29,7 @@ const BookingConfirmationPage = lazyPage(() => import('./features/bookings/Booki
 const MyBookingPage = lazyPage(() => import('./features/bookings/MyBookingPage').then((m) => m.MyBookingPage));
 const BookingPrivacyPage = lazyPage(() => import('./features/bookings/BookingPrivacyPage').then((m) => m.BookingPrivacyPage));
 import { canAccessRoute, homePathForRole } from './features/auth/permissions';
+import { isBookingHost, isPublicBookingPath } from './lib/bookingHost';
 import { useI18n } from './lib/i18n';
 import { ThemeProvider } from './lib/theme';
 import { LanguageToggle } from './components/LanguageToggle';
@@ -87,19 +88,27 @@ function AuthenticatedRoutes() {
   </Route></Routes>;
 }
 
+/** Customer booking pages. On the booking host every other path goes to /book. */
+function PublicBookingRoutes({ redirectOthers = false }: { redirectOthers?: boolean }) {
+  return <Suspense fallback={<main className="auth-loading"><LoadingState /></main>}><Routes>
+    <Route path="book" element={<PublicBookingPage />} />
+    <Route path="booking/confirmation/:reference" element={<BookingConfirmationPage />} />
+    <Route path="my-booking" element={<MyBookingPage />} />
+    <Route path="privacy" element={<BookingPrivacyPage />} />
+    {redirectOthers && <Route path="*" element={<Navigate to="/book" replace />} />}
+  </Routes></Suspense>;
+}
+
 function ApplicationRoutes() {
   const location = useLocation();
-  if (location.pathname === '/book' || location.pathname === '/privacy' || location.pathname === '/my-booking' || location.pathname.startsWith('/booking/confirmation/')) {
-    return <Suspense fallback={<main className="auth-loading"><LoadingState /></main>}><Routes>
-      <Route path="book" element={<PublicBookingPage />} />
-      <Route path="booking/confirmation/:reference" element={<BookingConfirmationPage />} />
-      <Route path="my-booking" element={<MyBookingPage />} />
-      <Route path="privacy" element={<BookingPrivacyPage />} />
-    </Routes></Suspense>;
-  }
+  if (isPublicBookingPath(location.pathname)) return <PublicBookingRoutes />;
   return <AuthenticatedRoutes />;
 }
 
 export default function App() {
+  // The customer booking domain never mounts staff authentication or staff routes.
+  if (isBookingHost(window.location.hostname)) {
+    return <ThemeProvider><I18nProvider><BrowserRouter><PublicBookingRoutes redirectOthers /></BrowserRouter></I18nProvider></ThemeProvider>;
+  }
   return <ThemeProvider><I18nProvider><BrowserRouter><AuthProvider><ApplicationRoutes /></AuthProvider></BrowserRouter></I18nProvider></ThemeProvider>;
 }
