@@ -12,3 +12,6 @@ coverage/
 Thumbs.db
 supabase/.branches/
 .vercel/
+.vercel
+.env*
+.superpowers/

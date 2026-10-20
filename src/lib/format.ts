@@ -13,3 +13,8 @@ export function formatBaht(value: number | string): string {
 export function formatDate(value: string): string {
   return formatBusinessDate(value);
 }
+
+export function formatFoodVariant(menuName: string | null | undefined, meatName?: string | null): string {
+  const menu = menuName?.trim() || 'Food item';
+  return meatName?.trim() ? `${menu} · ${meatName.trim()}` : menu;
+}

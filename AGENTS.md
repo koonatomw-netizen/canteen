@@ -9,7 +9,7 @@
 
 ## Data integrity and security
 
-- Stock is a ledger derived by batch. Never force FIFO, permit negative stock, or turn expiry into waste without staff confirmation.
+- Stock is a ledger derived by batch. Daily Closing accepts one total per menu and meat option, allocates inferred sales to the oldest production batch first, and assigns positive discrepancies to the newest batch. Waste and after-close removal remain batch-specific. Never permit negative stock or turn expiry into waste without staff confirmation.
 - Write a stock movement and its source record in one database transaction. Do not add a second, independently editable stock balance.
 - Important business edits and soft deletes must be auditable. Preserve before/after values and never edit or delete audit events from the app.
 - All tables in exposed schemas need deliberate grants and RLS. All photo buckets must be private and have RLS policies. Use only a publishable key in browser code; never expose a service/secret key.

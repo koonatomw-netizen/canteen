@@ -91,24 +91,128 @@ Phase 1. It will be entered manually if required.
 
 # 4. Phase 1 Navigation
 
-Keep primary navigation small:
+Keep navigation focused on each team's daily work:
 
-1.  **Dashboard**
-2.  **Production**
-3.  **Stock**
-4.  **Waste**
-5.  **Expenses**
-6.  **Reports**
-7.  **Manage**
+- **Front:** one **Today** workspace with tabs for Production, Stock & Waste,
+  and Daily Closing. Stock and waste stay in the same workspace; starting a
+  waste record from a stock batch carries that batch into the form. Add Menu is
+  available as a dialog from Production.
+- **Kitchen:** one **Expenses** workspace, which is the Kitchen landing page.
+  Kitchen can submit purchases and receipt photos but cannot view saved
+  expense records, historical amounts, receipt photos, or expense audit events.
+- **Manager:** one **Reports** page for the analytical overview and detailed
+  report, with one date range controlling metrics, charts, breakdowns, and
+  source records. Reports contain clearly separated Canteen Operations and
+  Co-living sections; the Manager can read the Co-living dashboard, source
+  records, and change history without editing them.
+- **Co-living:** a separate workspace with a summary Dashboard and a Records
+  page for individual issues and their audit history. It records only issues
+  entered into this website and never changes canteen stock.
+- **Website Admin:** retains direct links to the individual operational pages,
+  analysis, and administration tools.
+- **Podcast Room:** customers use the public `/book` page without an account.
+  Front, Manager, Website Admin, and Website Auditor use the protected
+  `/bookings` schedule inside this application.
 
 Under **Manage**:
 
 -   Menu Items
+-   Meat Options
 -   Stores
 -   Activity Log
 -   Settings
 
-Do not clutter the primary navigation with administrative pages.
+Daily Closing remains one tap away from the Front Today workspace and the
+mobile quick navigation. Keep administrative pages under Manage.
+
+## 4.1 Department Access
+
+Use six fixed application roles, enforced in both the interface and
+Postgres row-level security:
+
+- **Front** records production, waste, after-close stock removals, and daily
+  closing. Front cannot access expense records or receipts.
+- Front can also create active menu items (name, shelf life, optional notes).
+  Editing, deactivating, or removing existing menus remains Website Admin-only.
+- **Kitchen** creates expenses and attaches receipt photos at any time,
+  including after a daily close. Kitchen cannot read historical expense data,
+  totals, receipts, or expense audit events, and cannot correct or archive an
+  expense after submission. Kitchen does not write stock or closing records.
+- **Manager** reads the combined Reports page with analysis metrics and
+  detailed records only. Canteen Operations and Co-living reports are separate
+  sections with one date range per section. Stock figures in a report are
+  read-only; Managers cannot change operational records or reopen a closing.
+- **Co-living** records Meal Voucher issues and Gym Pass issues in its own
+  workspace. It can correct or cancel a saved issue only with a required
+  reason; every change preserves before/after values, actor, and time.
+  Co-living users cannot open Front, Kitchen, stock, waste, or canteen closing
+  workflows.
+- **Co-living, Manager, and Website Admin** can read Co-living dashboards,
+  source records, and audit history. Manager is read-only; Website Admin may
+  inspect and manage records. Front, Kitchen, and Website Auditor cannot read
+  Co-living records or their amounts.
+- **Website Auditor** can inspect operational workspaces, reports, activity
+  log, users, and configuration details, including private waste photos. This
+  role is strictly read-only: it cannot create, update, archive, delete, or
+  execute stock, closing, expense, or configuration changes. Expense amounts,
+  receipt photos, and expense audit events are restricted to Managers and
+  Website Admins.
+- **Website Admin** manages users/roles and shared configuration, can access
+  all pages, and may reopen a closing with a required reason.
+- **Front, Manager, and Website Admin** can read Podcast Room customer details,
+  cancel confirmed bookings, and mark ended bookings completed. **Website
+  Auditor** can read the schedule but cannot change it. Kitchen and Co-living
+  cannot read Podcast Room customer details.
+
+New Auth accounts are inactive until a Website Admin assigns a role and
+activates them. Migrate existing `staff` accounts to Front.
+
+## 4.3 Podcast Room Booking
+
+- Public customers can view availability and book the 4Seas Nimman Podcast
+  Room without creating an account. Public availability never exposes another
+  customer's name, contact details, or purpose.
+- The room is bookable daily from 09:00 to 21:00 in `Asia/Bangkok`, with starts
+  every 30 minutes, durations of 30, 60, 90, or 120 minutes, and a 30-day
+  booking window including today.
+- Name, phone number, and purpose are required; email is optional. Customer
+  details are used only for booking operations and are visible only to the
+  permitted staff roles.
+- Confirmed bookings for the same room must never overlap. The database must
+  enforce this rule for concurrent requests as well as the interface.
+- Staff can cancel a confirmed booking at any time or mark it completed after
+  its end time. Both actions are audited. Booking activity logs contain the
+  reference, times, source, and status only; they do not copy customer personal
+  data into the general activity log.
+- Booking records and functions share the existing Supabase project and role
+  system. They do not change canteen stock, expenses, closing, or Co-living
+  totals.
+
+## 4.2 Co-living Issue Tracking
+
+- Track meal voucher issue quantity, Green/Orange color, Guest Type, paid or
+  complimentary status, actual amount entered for that issue, optional
+  recipient, and notes. If the recipient is unknown, save the count and add
+  the recipient later.
+- Guest Types are Coliving, Residency, Longevity, Outside Customer, 4Seas
+  Community Member, Event, and Free Residency Project. Suggest Green for
+  Outside Customer and Orange for the other Guest Types; allow Co-living to
+  override the suggestion.
+- Green presets are 1/180 THB, 5/850 THB, 15/2,250 THB, and 30/3,960 THB.
+  Orange defaults to 110 THB per voucher. The actual amount remains editable.
+  Complimentary voucher issues record 0 THB and require a reason.
+- Track Gym Pass issues as Day or Monthly with Guest Type, quantity, actual
+  amount, and optional recipient. Monthly issues require a start and end date;
+  default the end date to one calendar month after the start and allow edits.
+- Do not track voucher redemption, remaining balances, voucher expiry, or the
+  monthly-pack renewal bonus. Gym Pass payment status is not a separate field
+  until its owner decides the workflow.
+- Co-living dashboard totals count only saved, non-cancelled website records.
+  Do not import historical Google Sheet rows. Keep voucher and gym totals
+  separate from food production, waste, expenses, or stock.
+- Corrections and cancellations require a reason, retain before/after values,
+  and identify the actor and time. Cancellations are soft and remain visible
+  in source history.
 
 ------------------------------------------------------------------------
 
@@ -168,6 +272,11 @@ than appearing on the analysis dashboard.
 Users must be able to add and manage food-box menu items without
 developer assistance.
 
+Front and Website Admin can create menus from the dedicated Menu Items page,
+linked from Production and Front's Today page. Creation is audited and does
+not create stock. Front cannot set reserved financial fields or edit, deactivate,
+or remove existing menus. Kitchen and Manager cannot create menus.
+
 Fields:
 
 -   Menu name
@@ -177,6 +286,17 @@ Fields:
 -   Future/reserved: selling price
 -   Future/reserved: estimated cost per box
 
+All menu items use the same configurable list of meat options. Start with:
+
+-   Beef
+-   Chicken
+-   Pork
+-   Vegan
+
+Staff can add or deactivate shared meat options from Manage. Each production
+batch selects one menu and one active meat option. The variant inherits its
+menu's shelf life; shelf life is not configured separately per meat.
+
 Example:
 
 ``` text
@@ -185,9 +305,10 @@ Default shelf life: 3 days
 Status: Active
 ```
 
-Do not permanently delete a menu that has historical transactions.
-
-Use inactive/archive status or soft deletion.
+Website Admin can permanently remove a menu after confirmation. The menu row
+is deleted and the action is audited; production batches keep a production-time
+menu-name snapshot, so stock, waste, closing, and reports retain their history.
+Removing a menu never deletes its batches or stock movements.
 
 The application must support different shelf lives by menu, even if
 initially many menus use the same shelf life.
@@ -243,6 +364,7 @@ Fields:
 
 -   Date produced
 -   Menu
+-   Meat option (shared list)
 -   Quantity produced
 -   Expiry date
 -   Notes (optional)
@@ -251,6 +373,7 @@ Example:
 
 ``` text
 Chicken Rice
+Meat option: Chicken
 Produced: 20 boxes
 Production date: 07 Oct 2026
 Expiry: 10 Oct 2026
@@ -259,6 +382,7 @@ Expiry: 10 Oct 2026
 ## 8.2 Automatic Expiry
 
 Each menu has a default shelf life.
+All meat variants of that menu share the same default shelf life.
 
 Example:
 
@@ -330,11 +454,10 @@ Expires 10 Oct
 
 Staff can distinguish remaining boxes by production batch.
 
-Do **not** force FIFO allocation because staff are able to identify
-which physical batch remains.
-
-The UI may suggest older batches first, but the user must be able to
-choose the actual batch.
+Waste and after-close removal remain linked to the actual batch selected by
+staff. Daily Closing is the exception: staff count one total per menu and
+meat option, so inferred sales are allocated to the oldest production batch
+first as described in Section 12.
 
 Stock should be calculated from the ledger/transactions rather than
 maintained as an independently editable number whenever possible.
@@ -395,12 +518,12 @@ Replace the handwritten waste workflow.
 Fields:
 
 -   Date/time
--   Menu
+-   Menu and meat variant (read from the selected batch)
 -   Production batch
 -   Quantity
 -   Reason
 -   Notes
--   Optional photo
+-   Optional multiple photos
 
 Waste reasons:
 
@@ -425,7 +548,7 @@ Prevent waste quantity from exceeding available batch stock.
 
 ## 11.2 Waste Photo
 
-Photo is optional.
+Photos are optional and multiple photos may be attached to one waste record.
 
 It may be useful for unusual events such as:
 
@@ -436,6 +559,29 @@ Reason: Refrigerator problem
 
 Do not require a photo for normal daily waste because that would slow
 down the workflow.
+
+## 11.3 Food Taken After Closing
+
+Record food that leaves stock after a day has been closed in a separate
+**Taken after closing** workflow on the Waste page. The record names the
+batch, quantity, date, reason, and optional note. “Other” requires a note.
+Reasons are configurable by a Website Admin.
+
+The Front/Admin form follows the latest closing status for the current
+Bangkok business date. A date without a closing, or a date reopened by an
+Admin, shows the Waste form. After staff close the date, the page switches to
+**Taken after closing**. The close action is the state change; there is no
+time-of-day cutoff. When the Bangkok business date advances to a date without
+a closing, the page returns to the Waste form. Read-only roles may switch
+between the two history views.
+
+This movement reduces current batch stock and appears in dashboard, reports,
+and exports as a separate total. It is not included in Waste quantities or
+the waste rate. Keep the original closing count unchanged as a snapshot of
+the physical count at close. Do not backdate a removal before the latest
+closed day, and do not record a post-close removal against a date unless its
+latest closing version is closed. Archive/restore actions create compensating
+ledger movements and audit events.
 
 ------------------------------------------------------------------------
 
@@ -453,47 +599,52 @@ approximately 1--2 minutes.
 Conceptual equation:
 
 ``` text
-Opening Stock
-+ Produced Today
-- Waste
-- Sold
-= Remaining
+Available stock (after recorded production and waste)
+- Inferred sold
++ Positive adjustment, when needed
+= Left at close
 ```
 
-Staff records the physical remaining quantities.
+Group the closing list by menu. Opening a menu shows only its meat options
+that currently have stock. For each menu and meat option, show the sum of
+**Available** boxes from all its batches and ask staff for one **Left at
+close** count. Calculate **Sold** from the aggregate total. Do not expose a
+separate physical count for each batch in the closing workflow.
 
-The system derives sold quantity where sufficient data exists.
+Assume the front team takes the oldest production batch first. Allocate
+closing-inferred sold quantities in ascending production date, then creation
+time and batch ID. When the physical count is higher than ledger stock,
+require one reason for that menu option and assign the positive adjustment
+to its newest production batch. Keep the resulting closing counts and stock
+movements attached to their individual batches for expiry, waste, reporting,
+and audit history.
 
 Example:
 
 ``` text
 Available: 30
-Waste:      2
-Remaining:  8
+Left at close: 8
 
-Calculated Sold: 20
+Calculated Sold: 22 (available stock already reflects recorded waste)
 ```
 
-## 12.2 Batch-Level Closing
+## 12.2 Menu and Variant Count
 
-Because staff can distinguish batches, remaining stock should be
-recorded/confirmed at batch level where necessary.
+The menu list should stay compact as the number of options and production
+batches grows. Staff open one menu, then count each in-stock meat option
+inside its on-screen dialog. Multiple batches of the same menu option are
+counted together.
 
 Example:
 
 ``` text
-Chicken Rice
-
-Batch 06 Oct
-Expected available: 5
-Remaining: 2
-
-Batch 07 Oct
-Expected available: 20
-Remaining: 8
+Hummus
+  Beef: 7 boxes available, 5 left
+  Pork: 2 boxes available, 2 left
 ```
 
-The system can then correctly carry each batch into the next day.
+The system records the allocation per batch in the stock ledger and carries
+the resulting batch balances into the next day.
 
 ## 12.3 Reconciliation
 
@@ -530,6 +681,9 @@ A day should have a state such as:
 -   Reopened
 
 If a closed day is reopened/edited, record the event in the audit log.
+Only a Website Admin can reopen a closed day. Require a reason and preserve
+the closing's before/after values, actor, timestamp, and reason in the
+read-only Activity Log. Managers remain report-only.
 
 ------------------------------------------------------------------------
 
@@ -545,7 +699,7 @@ Fields:
 -   Store
 -   Category
 -   Amount (THB)
--   Receipt photo
+-   Multiple receipt photos
 -   Notes
 
 Example:
@@ -563,6 +717,13 @@ Do not require itemized receipt entry.
 
 A Makro receipt for ฿2,223 is stored as one expense.
 
+Kitchen and Website Admin can create expenses. Kitchen can attach receipt
+photos during submission, then sees only a success confirmation; it cannot
+review historical amounts, records, receipts, or audit details. Only Website
+Admin can edit, archive, or restore expenses after submission. Managers and
+Website Admins can review expense totals, details, and private receipts through
+Reports. Front and Website Auditor cannot access expense records or receipts.
+
 ## 13.2 Expense Categories
 
 Support configurable categories, with at least:
@@ -577,9 +738,9 @@ Keep the category structure extensible.
 
 Phase 1 only needs:
 
--   Photo upload
--   Photo preview
--   Photo retrieval
+-   Multiple private photo uploads per expense
+-   Photo previews
+-   Photo retrieval through authenticated access or short-lived signed URLs
 
 Do not implement AI/OCR receipt extraction in Phase 1.
 
@@ -634,6 +795,8 @@ Makro — ฿2,223
 ```
 
 Audit records should not be editable by normal users.
+The Activity Log page is available to Website Admins. Manager reports do
+not grant permission to edit or reopen operational data.
 
 ------------------------------------------------------------------------
 
@@ -692,7 +855,20 @@ Useful visualizations:
 -   Waste by menu
 -   Waste by reason
 
+Managers have read-only access to the reports and may export the available
+CSV datasets. Include after-close stock removals separately from waste.
+
 Keep charts simple and readable.
+
+### 16.1 Co-living Reports
+
+Give Co-living its own dashboard section, separate from Canteen Operations.
+Show meal voucher issue totals by Green/Orange color and Guest Type, actual
+amount entered, Gym Pass issue totals by Day/Monthly and Guest Type, and actual
+amount entered. Provide the source issues and their full edit/cancellation
+history in the website so a reviewer does not need to download a spreadsheet.
+Only Co-living, Manager, and Website Admin can read this section. Manager is
+read-only; only Co-living and Website Admin can create, edit, or cancel issues.
 
 ------------------------------------------------------------------------
 
@@ -758,6 +934,30 @@ Exact implementation may vary, but the domain should roughly include:
 -   updated_at
 -   deleted_at
 
+## `app_members`
+
+-   user_id
+-   email
+-   display_name
+-   role (`front`, `kitchen`, `manager`, `auditor`, or `admin`)
+-   active
+
+New accounts remain inactive until approved by an active Website Admin.
+
+## `post_close_stock_outs`
+
+-   id
+-   removal_date
+-   production_batch_id
+-   quantity
+-   reason
+-   notes
+-   created_at / created_by
+-   deleted_at
+
+Each active record creates a negative stock movement. Archive/restore adds
+an inverse movement; it never edits a stock balance directly.
+
 ## `stores`
 
 -   id
@@ -780,7 +980,7 @@ Exact implementation may vary, but the domain should roughly include:
 -   store_id
 -   category_id
 -   amount_thb
--   receipt_url
+-   receipt_url (legacy single-photo compatibility)
 -   notes
 -   created_at
 -   updated_at
@@ -790,6 +990,7 @@ Exact implementation may vary, but the domain should roughly include:
 
 -   id
 -   menu_id
+-   meat_option_id (nullable only for unmatched legacy batches)
 -   production_date
 -   quantity_produced
 -   expiry_date
@@ -806,10 +1007,28 @@ Exact implementation may vary, but the domain should roughly include:
 -   quantity
 -   reason
 -   notes
--   photo_url
+-   photo_url (legacy single-photo compatibility)
 -   created_at
 -   updated_at
 -   deleted_at
+
+## `meat_options`
+
+-   id
+-   name
+-   active
+-   created_at
+-   updated_at
+
+Every menu shares this one option list. Shelf life remains on the menu item.
+
+## `waste_record_photos` and `expense_receipt_photos`
+
+-   id
+-   parent record ID
+-   private storage path
+-   created_at
+-   created_by
 
 ## `daily_closings`
 
@@ -873,9 +1092,11 @@ THB
 # 20. Important Business Rules
 
 1.  Food can remain in stock across multiple days until expiry.
-2.  Staff can distinguish which production batch remaining boxes belong
-    to.
-3.  Do not blindly allocate remaining/sold stock using FIFO.
+2.  Waste and after-close removal are recorded against the batch staff
+    selects.
+3.  Daily Closing counts one total per menu and meat option, allocates
+    inferred sales to the oldest production batch first, and assigns a
+    positive discrepancy to the newest batch.
 4.  A batch has its own production date and expiry date.
 5.  Default expiry can be generated from the menu shelf life but must be
     editable.
@@ -972,8 +1193,8 @@ Prioritize:
 
 Forms should work comfortably one-handed where practical.
 
-Receipt and waste photos should support direct mobile camera/file
-upload.
+Receipt and waste photos should support multiple images from the mobile
+camera or file picker. Keep storage private.
 
 ------------------------------------------------------------------------
 
@@ -1004,14 +1225,22 @@ This is conceptual, not a strict visual design requirement.
 Phase 1 is considered successful when a user can:
 
 -   Add a new menu.
+-   Add, deactivate, and restore a shared meat option.
 -   Add a new store.
+-   Approve staff accounts and assign Front, Kitchen, Manager, Website Auditor
+    (read-only), or Website Admin roles.
 -   Record today's food production.
+-   Choose a meat option for each production batch.
 -   Automatically receive a suggested expiry date.
 -   Override expiry when needed.
 -   See current stock by menu and batch.
+-   See variants as separate batches through Stock, Waste, and Closing.
 -   See expiring and expired batches.
 -   Record waste against a batch.
--   Add an expense and receipt photo.
+-   Record post-close pickups against a batch without inflating waste totals
+    or changing the saved physical closing snapshot.
+-   Add an expense with multiple receipt photos.
+-   Attach multiple photos to a waste record.
 -   Complete daily closing.
 -   Record remaining stock by batch.
 -   Have sold quantity calculated.
@@ -1019,9 +1248,17 @@ Phase 1 is considered successful when a user can:
 -   Record a justified stock adjustment.
 -   View daily/weekly/monthly summaries.
 -   View activity history.
+-   Reopen a day as Website Admin only, with a required reason and audit
+    history.
 -   Safely delete/restore supported records.
+-   Permanently remove a menu from configuration while keeping all batch and
+    stock history readable under the saved menu-name snapshot.
 -   Export core data.
 -   Complete common workflows comfortably on mobile.
+-   Book the Podcast Room from a public mobile page without an account.
+-   Prevent overlapping Podcast Room bookings, including concurrent requests.
+-   Let authorised staff review the weekly room schedule, contact the customer,
+    cancel a booking, and mark an ended booking completed.
 
 Most importantly:
 
@@ -1043,7 +1280,9 @@ Out of scope:
 -   POS integration
 -   AI/OCR receipt reading
 -   Automatic revenue calculation
--   Complex roles and permissions
+-   Custom per-user permission matrices beyond the six fixed roles
+-   Full accounting or automatic revenue calculation; actual amounts on
+    voucher and Gym Pass issues are retained only as entered issue details
 -   Supplier procurement workflow
 -   Automatic historical Google Sheet migration
 
