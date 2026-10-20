@@ -110,6 +110,9 @@ Keep navigation focused on each team's daily work:
   entered into this website and never changes canteen stock.
 - **Website Admin:** retains direct links to the individual operational pages,
   analysis, and administration tools.
+- **Podcast Room:** customers use the public `/book` page without an account.
+  Front, Manager, Website Admin, and Website Auditor use the protected
+  `/bookings` schedule inside this application.
 
 Under **Manage**:
 
@@ -156,9 +159,34 @@ Postgres row-level security:
   Website Admins.
 - **Website Admin** manages users/roles and shared configuration, can access
   all pages, and may reopen a closing with a required reason.
+- **Front, Manager, and Website Admin** can read Podcast Room customer details,
+  cancel confirmed bookings, and mark ended bookings completed. **Website
+  Auditor** can read the schedule but cannot change it. Kitchen and Co-living
+  cannot read Podcast Room customer details.
 
 New Auth accounts are inactive until a Website Admin assigns a role and
 activates them. Migrate existing `staff` accounts to Front.
+
+## 4.3 Podcast Room Booking
+
+- Public customers can view availability and book the 4Seas Nimman Podcast
+  Room without creating an account. Public availability never exposes another
+  customer's name, contact details, or purpose.
+- The room is bookable daily from 09:00 to 21:00 in `Asia/Bangkok`, with starts
+  every 30 minutes, durations of 30, 60, 90, or 120 minutes, and a 30-day
+  booking window including today.
+- Name, phone number, and purpose are required; email is optional. Customer
+  details are used only for booking operations and are visible only to the
+  permitted staff roles.
+- Confirmed bookings for the same room must never overlap. The database must
+  enforce this rule for concurrent requests as well as the interface.
+- Staff can cancel a confirmed booking at any time or mark it completed after
+  its end time. Both actions are audited. Booking activity logs contain the
+  reference, times, source, and status only; they do not copy customer personal
+  data into the general activity log.
+- Booking records and functions share the existing Supabase project and role
+  system. They do not change canteen stock, expenses, closing, or Co-living
+  totals.
 
 ## 4.2 Co-living Issue Tracking
 
@@ -1227,6 +1255,10 @@ Phase 1 is considered successful when a user can:
     stock history readable under the saved menu-name snapshot.
 -   Export core data.
 -   Complete common workflows comfortably on mobile.
+-   Book the Podcast Room from a public mobile page without an account.
+-   Prevent overlapping Podcast Room bookings, including concurrent requests.
+-   Let authorised staff review the weekly room schedule, contact the customer,
+    cancel a booking, and mark an ended booking completed.
 
 Most importantly:
 

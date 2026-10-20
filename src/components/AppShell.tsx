@@ -1,7 +1,7 @@
 import { Suspense, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
-  Archive, BarChart3, Boxes, CalendarCheck, ChevronDown, ClipboardList,
+  Archive, BarChart3, Boxes, CalendarCheck, ChevronDown, ClipboardList, Headphones,
   LayoutDashboard, LogOut, Menu, ReceiptText, Settings2, ShieldCheck, ShoppingBasket,
   Trash2, UtensilsCrossed, X,
 } from 'lucide-react';
@@ -47,8 +47,10 @@ const navGroups: NavGroupConfig[] = [
 const links: NavLinkConfig[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'auditor'], group: 'overview' },
   { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'auditor'], group: 'overview' },
+  { to: '/bookings', label: 'Podcast bookings', icon: Headphones, roles: ['admin', 'auditor'], group: 'overview' },
   { to: '/', label: 'Today', icon: CalendarCheck, roles: ['front'], group: 'staff' },
   { to: '/', label: 'Manager Reports', icon: BarChart3, roles: ['manager'], group: 'staff' },
+  { to: '/bookings', label: 'Podcast bookings', icon: Headphones, roles: ['front', 'manager'], group: 'staff' },
   { to: '/production', label: 'Production', icon: ShoppingBasket, roles: ['admin', 'auditor'], group: 'canteen' },
   { to: '/menus', label: 'Menu items', icon: UtensilsCrossed, roles: ['admin', 'auditor'], group: 'canteen' },
   { to: '/stock', label: 'Stock & expiry', icon: Boxes, roles: ['admin', 'auditor'], group: 'canteen' },
@@ -66,7 +68,7 @@ const links: NavLinkConfig[] = [
 
 const mobileLinkOrder: Record<AppRole, string[]> = {
   admin: ['/', '/stock', '/waste', '/closing', '/manage'],
-  manager: ['/'],
+  manager: ['/', '/bookings'],
   front: ['/'],
   kitchen: ['/expenses'],
   auditor: ['/', '/stock', '/waste', '/closing', '/manage'],
@@ -97,6 +99,7 @@ export function AppShell() {
     { to: '/', label: 'Today', icon: CalendarCheck, tab: 'production' },
     { to: '/?tab=stock', label: 'Stock', icon: Boxes, tab: 'stock' },
     { to: '/?tab=closing', label: 'Close', icon: CalendarCheck, tab: 'closing' },
+    { to: '/bookings', label: 'Bookings', icon: Headphones, tab: 'bookings' },
   ] : mobileLinkOrder[role].map((path) => links.find((link) => link.to === path && link.roles.includes(role))).filter((link): link is (typeof links)[number] => Boolean(link));
   const activeTab = new URLSearchParams(location.search).get('tab') ?? 'production';
 
@@ -177,7 +180,7 @@ export function AppShell() {
           const Icon = link.icon;
           const label = link.label === 'Stock & expiry' ? 'Stock' : link.to === '/closing' ? 'Close' : link.label;
           const tab = 'tab' in link ? link.tab : undefined;
-          const active = role === 'front' ? tab === activeTab : location.pathname === link.to;
+          const active = role === 'front' ? (tab === 'bookings' ? location.pathname === '/bookings' : location.pathname === '/' && tab === activeTab) : location.pathname === link.to;
           return <NavLink key={link.to} to={link.to} end={link.to === '/' || link.to === '/coliving'} className={() => `bottom-nav-item${active ? ' active' : ''}`}><Icon size={19} /><span>{t(label)}</span></NavLink>;
         })}
       </nav>

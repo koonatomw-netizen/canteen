@@ -22,6 +22,7 @@ const routeRoles: Record<string, readonly AppRole[]> = {
   '/activity': ['admin', 'auditor'],
   '/coliving': ['admin', 'coliving'],
   '/coliving/records': ['admin', 'coliving'],
+  '/bookings': ['admin', 'manager', 'front', 'auditor'],
 };
 
 export function canAccessRoute(role: AppRole, path: string): boolean {

@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { lazy, type ComponentType, type ReactNode } from 'react';
+import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import { AppShell } from './components/AppShell';
 import { LoadingState, Notice } from './components/Feedback';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
@@ -23,6 +23,11 @@ const StockPage = lazyPage(() => import('./features/stock/StockPage').then((m) =
 const WastePage = lazyPage(() => import('./features/waste/WastePage').then((m) => m.WastePage));
 const TodayPage = lazyPage(() => import('./features/home/TodayPage').then((m) => m.TodayPage));
 const ColivingPage = lazyPage(() => import('./features/coliving/ColivingPage').then((m) => m.ColivingPage));
+const BookingsPage = lazyPage(() => import('./features/bookings/BookingsPage').then((m) => m.BookingsPage));
+const PublicBookingPage = lazyPage(() => import('./features/bookings/PublicBookingPage').then((m) => m.PublicBookingPage));
+const BookingConfirmationPage = lazyPage(() => import('./features/bookings/BookingConfirmationPage').then((m) => m.BookingConfirmationPage));
+const MyBookingPage = lazyPage(() => import('./features/bookings/MyBookingPage').then((m) => m.MyBookingPage));
+const BookingPrivacyPage = lazyPage(() => import('./features/bookings/BookingPrivacyPage').then((m) => m.BookingPrivacyPage));
 import { canAccessRoute, homePathForRole } from './features/auth/permissions';
 import { useI18n } from './lib/i18n';
 import { ThemeProvider } from './lib/theme';
@@ -77,10 +82,24 @@ function AuthenticatedRoutes() {
     <Route path="activity" element={<RoleGate><ActivityPage /></RoleGate>} />
     <Route path="coliving" element={<RoleGate><ColivingPage view="dashboard" /></RoleGate>} />
     <Route path="coliving/records" element={<RoleGate><ColivingPage view="records" /></RoleGate>} />
+    <Route path="bookings" element={<RoleGate><BookingsPage /></RoleGate>} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Route></Routes>;
 }
 
+function ApplicationRoutes() {
+  const location = useLocation();
+  if (location.pathname === '/book' || location.pathname === '/privacy' || location.pathname === '/my-booking' || location.pathname.startsWith('/booking/confirmation/')) {
+    return <Suspense fallback={<main className="auth-loading"><LoadingState /></main>}><Routes>
+      <Route path="book" element={<PublicBookingPage />} />
+      <Route path="booking/confirmation/:reference" element={<BookingConfirmationPage />} />
+      <Route path="my-booking" element={<MyBookingPage />} />
+      <Route path="privacy" element={<BookingPrivacyPage />} />
+    </Routes></Suspense>;
+  }
+  return <AuthenticatedRoutes />;
+}
+
 export default function App() {
-  return <ThemeProvider><I18nProvider><BrowserRouter><AuthProvider><AuthenticatedRoutes /></AuthProvider></BrowserRouter></I18nProvider></ThemeProvider>;
+  return <ThemeProvider><I18nProvider><BrowserRouter><AuthProvider><ApplicationRoutes /></AuthProvider></BrowserRouter></I18nProvider></ThemeProvider>;
 }

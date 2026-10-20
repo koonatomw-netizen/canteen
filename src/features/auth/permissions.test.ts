@@ -48,6 +48,14 @@ describe('role access', () => {
     expect(canAccessRoute('admin', '/activity')).toBe(true);
   });
 
+  it('shares podcast bookings only with the operational booking roles', () => {
+    for (const role of ['admin', 'manager', 'front', 'auditor'] as const) {
+      expect(canAccessRoute(role, '/bookings')).toBe(true);
+    }
+    expect(canAccessRoute('kitchen', '/bookings')).toBe(false);
+    expect(canAccessRoute('coliving', '/bookings')).toBe(false);
+  });
+
   it('gives Website Auditor read-only routes across the workspace', () => {
     for (const path of ['/', '/production', '/menus', '/stock', '/waste', '/closing', '/reports', '/manage', '/activity']) {
       expect(canAccessRoute('auditor', path)).toBe(true);
