@@ -116,3 +116,55 @@ export function buildMenuCards(rows: ReportVariantSummary[]): { wasted: MenuCard
     noWaste: cards.filter((card) => card.waste <= 0).sort((a, b) => a.menu.localeCompare(b.menu)),
   };
 }
+
+/** One closing count from a closed, latest-version daily closing. */
+export type InsightClosingCount = { date: string; label: string; batchDate: string | null; expected: number; remaining: number; sold: number };
+export type InsightQuantity = { label: string; date: string; quantity: number };
+
+export const GUIDE_RULES = { minStockedDays: 5, makeLessWastePercent: 20, makeLessMaxSoldOutDays: 1, makeMoreSoldOutShare: 0.4, makeMoreMaxWastePercent: 10 } as const;
+
+export type GuideLabel = 'not_enough_data' | 'make_less' | 'could_make_more' | 'about_right';
+export type GuideRow = { label: string; verdict: GuideLabel; stockedDays: number; soldOutDays: number; produced: number; waste: number; wastePercent: number | null };
+
+const VERDICT_ORDER: GuideLabel[] = ['make_less', 'could_make_more', 'about_right', 'not_enough_data'];
+
+function inRange(date: string, window: DateRange) {
+  return date >= window.start && date <= window.end;
+}
+
+/** Stocked and sold-out days per label, combining every batch of an option on the same day. */
+function stockedDayCounts(closings: InsightClosingCount[], window: DateRange) {
+  const byLabelDate = new Map<string, Map<string, { expected: number; remaining: number }>>();
+  for (const count of closings) {
+    if (!inRange(count.date, window)) continue;
+    const days = byLabelDate.get(count.label) ?? new Map<string, { expected: number; remaining: number }>();
+    const day = days.get(count.date) ?? { expected: 0, remaining: 0 };
+    day.expected += Number(count.expected) || 0;
+    day.remaining += Number(count.remaining) || 0;
+    days.set(count.date, day);
+    byLabelDate.set(count.label, days);
+  }
+  return byLabelDate;
+}
+
+export function classifyProductionGuide(input: { production: InsightQuantity[]; waste: InsightQuantity[]; closings: InsightClosingCount[]; window: DateRange }): GuideRow[] {
+  const { window } = input;
+  const days = stockedDayCounts(input.closings, window);
+  const sumBy = (rows: InsightQuantity[]) => rows.reduce((totals, row) => inRange(row.date, window) ? totals.set(row.label, (totals.get(row.label) ?? 0) + (Number(row.quantity) || 0)) : totals, new Map<string, number>());
+  const produced = sumBy(input.production);
+  const waste = sumBy(input.waste);
+  const labels = new Set([...days.keys(), ...produced.keys(), ...waste.keys()]);
+  return [...labels].map((label): GuideRow => {
+    const stocked = [...(days.get(label)?.values() ?? [])].filter((day) => day.expected > 0);
+    const stockedDays = stocked.length;
+    const soldOutDays = stocked.filter((day) => day.remaining === 0).length;
+    const made = produced.get(label) ?? 0;
+    const wasted = waste.get(label) ?? 0;
+    const wastePercent = wasteRatePercent(wasted, made);
+    let verdict: GuideLabel = 'about_right';
+    if (stockedDays < GUIDE_RULES.minStockedDays) verdict = 'not_enough_data';
+    else if (wastePercent !== null && wastePercent >= GUIDE_RULES.makeLessWastePercent && soldOutDays <= GUIDE_RULES.makeLessMaxSoldOutDays) verdict = 'make_less';
+    else if (soldOutDays >= GUIDE_RULES.makeMoreSoldOutShare * stockedDays && (wastePercent ?? 0) < GUIDE_RULES.makeMoreMaxWastePercent) verdict = 'could_make_more';
+    return { label, verdict, stockedDays, soldOutDays, produced: made, waste: wasted, wastePercent };
+  }).sort((a, b) => VERDICT_ORDER.indexOf(a.verdict) - VERDICT_ORDER.indexOf(b.verdict) || a.label.localeCompare(b.label));
+}

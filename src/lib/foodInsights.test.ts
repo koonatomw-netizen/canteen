@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMenuCards, lastFourFullWeeks, lastFullWeek, mondayOf, rankMostWasted, splitFoodLabel, suggestionWindow, summarizeByMeat, trendWeeks, trendWindow } from './foodInsights';
+import { buildMenuCards, classifyProductionGuide, type InsightClosingCount, type InsightQuantity, lastFourFullWeeks, lastFullWeek, mondayOf, rankMostWasted, splitFoodLabel, suggestionWindow, summarizeByMeat, trendWeeks, trendWindow } from './foodInsights';
 import { wasteRatePercent, type ReportVariantSummary } from './reportAnalysis';
 
 function variant(label: string, produced: number, sold: number, waste: number, currentStock = 0, extra: Partial<ReportVariantSummary> = {}): ReportVariantSummary {
@@ -84,5 +84,71 @@ describe('report date windows', () => {
     expect(weeks[0]).toEqual({ start: '2026-08-31', end: '2026-09-06', partial: false });
     expect(weeks[7]).toEqual({ start: '2026-10-19', end: '2026-10-21', partial: true });
     expect(trendWeeks('2026-10-25')[7].partial).toBe(false);
+  });
+});
+
+const WINDOW = { start: '2026-09-21', end: '2026-10-18' };
+const LABEL = 'Green colors bowl · Chicken';
+
+/** Closing counts on consecutive days from 2026-10-01; `soldOutDays` of them end at 0. */
+function stockedDays(days: number, soldOutDays: number, label = LABEL): InsightClosingCount[] {
+  return Array.from({ length: days }, (_, index) => ({
+    date: `2026-10-${String(index + 1).padStart(2, '0')}`,
+    label,
+    batchDate: `2026-10-${String(index + 1).padStart(2, '0')}`,
+    expected: 5,
+    remaining: index < soldOutDays ? 0 : 2,
+    sold: 3,
+  }));
+}
+
+function quantity(amount: number, label = LABEL, date = '2026-10-05'): InsightQuantity {
+  return { label, date, quantity: amount };
+}
+
+function guide(production: number, waste: number, closings: InsightClosingCount[]) {
+  return classifyProductionGuide({ production: [quantity(production)], waste: waste ? [quantity(waste)] : [], closings, window: WINDOW })[0];
+}
+
+describe('make more / make less guide', () => {
+  it('needs at least five stocked days', () => {
+    expect(guide(10, 5, stockedDays(4, 0)).verdict).toBe('not_enough_data');
+  });
+
+  it('suggests making less when waste is at least 20% and it rarely sells out', () => {
+    expect(guide(30, 6, stockedDays(6, 1))).toMatchObject({ verdict: 'make_less', stockedDays: 6, soldOutDays: 1, wastePercent: 20 });
+    expect(guide(30, 6, stockedDays(6, 2)).verdict).toBe('about_right');
+  });
+
+  it('suggests making more when it often sells out with little waste', () => {
+    expect(guide(40, 3, stockedDays(10, 4)).verdict).toBe('could_make_more');
+    expect(guide(40, 4, stockedDays(10, 4)).verdict).toBe('about_right');
+  });
+
+  it('treats several batches of one option on the same day as one day', () => {
+    const day = (remaining: number[]): InsightClosingCount[] => remaining.map((left) => ({ date: '2026-10-10', label: LABEL, batchDate: '2026-10-09', expected: 3, remaining: left, sold: 3 - left }));
+    expect(classifyProductionGuide({ production: [], waste: [], closings: day([0, 2]), window: WINDOW })[0]).toMatchObject({ stockedDays: 1, soldOutDays: 0 });
+    expect(classifyProductionGuide({ production: [], waste: [], closings: day([0, 0]), window: WINDOW })[0]).toMatchObject({ stockedDays: 1, soldOutDays: 1 });
+  });
+
+  it('ignores days that were not stocked and rows outside the window', () => {
+    const closings = [...stockedDays(5, 0), { date: '2026-09-20', label: LABEL, batchDate: null, expected: 5, remaining: 0, sold: 5 }, { date: '2026-10-12', label: LABEL, batchDate: null, expected: 0, remaining: 0, sold: 0 }];
+    expect(classifyProductionGuide({ production: [quantity(20), quantity(50, LABEL, '2026-09-01')], waste: [], closings, window: WINDOW })[0]).toMatchObject({ stockedDays: 5, soldOutDays: 0, produced: 20 });
+  });
+
+  it('never reports a waste percentage without production', () => {
+    expect(guide(0, 3, stockedDays(6, 0))).toMatchObject({ wastePercent: null, verdict: 'about_right' });
+  });
+
+  it('lists make less first, then could make more, about right and not enough data', () => {
+    const rows = classifyProductionGuide({
+      production: [quantity(30, 'A · Beef'), quantity(40, 'B · Beef'), quantity(30, 'C · Beef'), quantity(30, 'D · Beef')],
+      waste: [quantity(1, 'A · Beef'), quantity(1, 'B · Beef'), quantity(9, 'C · Beef')],
+      closings: [...stockedDays(6, 0, 'A · Beef'), ...stockedDays(10, 5, 'B · Beef'), ...stockedDays(6, 0, 'C · Beef'), ...stockedDays(2, 0, 'D · Beef')],
+      window: WINDOW,
+    });
+    expect(rows.map((row) => [row.label, row.verdict])).toEqual([
+      ['C · Beef', 'make_less'], ['B · Beef', 'could_make_more'], ['A · Beef', 'about_right'], ['D · Beef', 'not_enough_data'],
+    ]);
   });
 });
