@@ -17,9 +17,11 @@ import { useI18n } from '../../lib/i18n';
 import { ColivingPage } from '../coliving/ColivingPage';
 import { ArchiveReviewDialog, type ArchiveReviewTarget } from './ArchiveReviewDialog';
 import { ReportControls, type RangePreset } from './ReportControls';
-import { buildMenuCards, classifyProductionGuide, lastFourFullWeeks, lastFullWeek, rankMostWasted, suggestionWindow, summarizeByMeat, trendWindow, type InsightClosingCount, type InsightQuantity } from '../../lib/foodInsights';
+import { buildMenuCards, classifyProductionGuide, foodAge, lastFourFullWeeks, lastFullWeek, rankMostWasted, suggestionWindow, summarizeByMeat, trendWindow, weekdaySalesGrid, weeklyWasteTrend, type InsightClosingCount, type InsightQuantity } from '../../lib/foodInsights';
 import { ReportSummaryTab } from './ReportSummaryTab';
 import { ReportMenuCards } from './ReportMenuCards';
+import { ReportFoodAge } from './ReportFoodAge';
+import { ReportTrendsTab } from './ReportTrendsTab';
 
 interface Batch { id?: string; menu_name_snapshot: string; production_date: string; quantity_produced?: number; deleted_at?: string | null; meat_options: { name: string } | null; }
 interface Production { id: string; menu_name_snapshot: string; production_date: string; quantity_produced: number; expiry_date: string; meat_options: { name: string } | null; }
@@ -457,6 +459,13 @@ function CanteenReportsContent() {
   const meatSummary = summarizeByMeat(foodVariantSummary);
   const menuCards = buildMenuCards(foodVariantSummary);
   const productionGuide = classifyProductionGuide({ production: history.production, waste: history.waste, closings: history.closings, window: suggestionWindow(end) });
+  // Food age follows the waste-reason filter; trends and weekday sales use food filters only.
+  const foodAgeData = foodAge({
+    waste: filteredWaste.map((row) => ({ wasteDate: row.waste_date, batchDate: row.production_batches?.production_date ?? null, quantity: Number(row.quantity) })),
+    closings: insightClosingCounts(filteredClosings),
+  });
+  const weekdayRows = weekdaySalesGrid(history.closings, suggestionWindow(end));
+  const wasteTrend = weeklyWasteTrend({ production: history.production, waste: history.waste, end });
   const reportWarnings = [
     ...(expiredStock > 0 ? [`${formatQuantity(expiredStock)} ${t('boxes in stock are past expiry')}`] : []),
     ...(negativeStock.length > 0 ? [`${negativeStock.length} ${t('negative stock batches')}`] : []),
@@ -534,6 +543,7 @@ function CanteenReportsContent() {
       </>} />}
     {tab === 'menus' && <ReportMenuCards cards={menuCards} busy={busy} table={<>{busy ? <LoadingState label="Building your report…" /> : variantSummary.length === 0 ? <EmptyState title="No food records in this range" detail="Try a different date range or clear some filters." /> : <div className="report-table-wrap"><table className="report-data-table"><thead><tr><th>{t('Menu / meat')}</th><th>{t('Produced')}</th><th>{t('Stock correction')}</th><th>{t('Sold')}</th><th>{t('Waste')}</th><th>{t('Retained archived stock effect')}</th><th>{t('Waste %')}</th><th>{t('Current stock')}</th></tr></thead><tbody>{variantSummary.map((row) => <tr key={row.label} className={row.currentStock < 0 ? 'report-negative-stock-row' : undefined}><th scope="row">{row.label}</th><td>{formatQuantity(row.produced)}</td><td>{row.adjustment ? `+${formatQuantity(row.adjustment)}` : '—'}</td><td>{formatQuantity(row.sold)}</td><td>{formatQuantity(row.waste)}</td><td>{row.archivedDeduction + row.removedArchivedEffect ? `−${formatQuantity(row.archivedDeduction + row.removedArchivedEffect)}` : '—'}</td><td>{row.wasteRate === null ? '—' : `${Math.round(row.wasteRate)}%`}</td><td>{formatQuantity(row.currentStock)}</td></tr>)}</tbody></table></div>}</>} />}
     {tab === 'waste' && <>
+      <ReportFoodAge age={foodAgeData} busy={busy} />
       <section className="panel expense-breakdown"><div className="panel-head"><div><span className="eyebrow">{t('WHY FOOD WAS LOST')}</span><h2>{t('Waste by reason')}</h2></div></div>
         {busy ? <LoadingState label="Gathering waste reasons…" /> : reasonTotals.length === 0 ? <EmptyState title="No waste in this range" detail="Waste quantity by reason will appear here." /> : <div className="store-breakdown">{reasonTotals.map(([reason, quantity], index) => <div className="store-bar-row" key={reason}><div><span>{t(reason)}</span><strong>{formatQuantity(quantity)} {t('boxes')}</strong></div><span className={`store-bar-line store-bar-${index % 4}`}><i style={{ width: `${quantity / (reasonTotals[0]?.[1] || 1) * 100}%` }} /></span></div>)}</div>}
       </section>
@@ -552,7 +562,7 @@ function CanteenReportsContent() {
       </section>
       </div>
     </>}
-    {tab === 'trends' && <section className="panel"><EmptyState title="Trends are on the way" detail="Weekday sales and the weekly waste trend will appear here." /></section>}
+    {tab === 'trends' && <ReportTrendsTab weekday={weekdayRows} trend={wasteTrend} busy={busy} />}
     {tab === 'expenses' && canViewExpenses && <>
       {canViewExpenses && <section className="panel report-chart-panel"><div className="panel-head"><div><span className="eyebrow">{t('SPENDING TREND')}</span><h2>{t('Expenses over time')}</h2></div></div>
         {busy ? <LoadingState label="Gathering expenses…" /> : !totalExpenses ? <EmptyState title="No expenses in this range" detail="Choose another date range or add a purchase." /> : <div className="bar-chart expense-trend-chart" role="img" aria-label="Expenses across the selected date range">{daily.map((day) => <div className="bar-day" key={day.start} title={`${formatDate(day.start)}${day.start === day.end ? '' : ` – ${formatDate(day.end)}`}: ${formatBaht(day.expenses)}`}><div className="bar-pair"><span className="bar bar-expense" style={{ height: `${Math.max(day.expenses ? 3 : 0, day.expenses / maxExpense * 100)}%` }} /></div><small>{day.end.slice(-2)}</small></div>)}</div>}

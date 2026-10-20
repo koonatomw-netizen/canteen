@@ -1894,3 +1894,38 @@ html[data-theme='dark'] .app-frame :is(.report-insight, .report-guide-tag.ok) { 
 html[data-theme='dark'] .app-frame .report-tabs { border-color: #2c3b32; }
 html[data-theme='dark'] .app-frame .report-tabs button { color: #9fb0a4; }
 html[data-theme='dark'] .app-frame .report-tabs button.active { color: #9fdcab; border-color: #9fdcab; }
+
+/* Weekly report: food age and trends */
+.report-food-age, .report-trend-panel, .report-weekday-panel { padding: 18px; }
+.report-food-age .panel-head p, .report-trend-panel .panel-head p, .report-weekday-panel .panel-head p { font-size: 12px; }
+.report-age-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); align-items: end; gap: 12px; padding: 10px 0; border-top: 1px solid #f0f2ee; }
+.report-age-row > strong { align-self: center; color: #2f3d34; font-size: 13px; }
+.report-age-cells { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.report-age-cell { display: grid; justify-items: center; gap: 3px; }
+.report-age-bar { width: 100%; max-width: 64px; height: 56px; display: flex; align-items: flex-end; border-radius: 6px; background: #f2f4f0; overflow: hidden; }
+.report-age-bar i { display: block; width: 100%; min-height: 2px; }
+.report-age-cell.waste .report-age-bar i { background: #e0795a; }
+.report-age-cell.sold .report-age-bar i { background: #2f7a4f; }
+.report-age-cell b { color: #2f3d34; font-size: 14px; }
+.report-age-cell small { color: #74817a; font-size: 11px; text-align: center; }
+.report-age-unknown { margin: 8px 0 0; color: #87601c; font-size: 12px; }
+.report-trend-svg { width: 100%; height: auto; display: block; }
+.report-trend-grid { stroke: #e8ece6; stroke-width: 1; }
+.report-trend-axis { fill: #7a867e; font-size: 11px; font-family: 'DM Sans', sans-serif; }
+.report-trend-line { fill: none; stroke: #e0795a; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.report-trend-point { fill: #e0795a; stroke: #fff; stroke-width: 2; }
+.report-trend-point.partial { fill: #fff; stroke: #e0795a; }
+.report-weekday-wrap { overflow-x: auto; }
+.report-weekday-grid { width: 100%; min-width: 560px; border-collapse: separate; border-spacing: 3px; font-size: 12px; }
+.report-weekday-grid th { padding: 6px 8px; color: #5f6d64; font-weight: 700; text-align: center; }
+.report-weekday-grid tbody th { max-width: 220px; color: #2f3d34; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.report-weekday-grid td { min-width: 44px; height: 36px; border-radius: 6px; background: #f6f7f4; color: #1f3326; font-weight: 700; text-align: center; }
+@media (max-width: 560px) {
+  .report-age-row { grid-template-columns: 1fr; }
+  .report-age-cells { gap: 6px; }
+}
+html[data-theme='dark'] .app-frame :is(.report-age-row > strong, .report-age-cell b, .report-weekday-grid tbody th) { color: #e0e9e2; }
+html[data-theme='dark'] .app-frame :is(.report-age-bar, .report-weekday-grid td) { background-color: #1d2a22; color: #e0e9e2; }
+html[data-theme='dark'] .app-frame .report-trend-grid { stroke: #2c3b32; }
+html[data-theme='dark'] .app-frame .report-trend-point { stroke: #18231c; }
+html[data-theme='dark'] .app-frame .report-trend-point.partial { fill: #18231c; }
