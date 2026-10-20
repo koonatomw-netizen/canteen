@@ -14,3 +14,4 @@ supabase/.branches/
 .vercel/
 .vercel
 .env*
+.superpowers/
