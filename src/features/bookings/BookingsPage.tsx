@@ -16,6 +16,7 @@ import {
   daySchedule,
   holdsTime,
   isInRoomNow,
+  requestDeadline,
   toBusinessDate,
   toBusinessTime,
   weekDates,
@@ -23,12 +24,12 @@ import {
   type StaffBooking,
 } from './bookingModel';
 
-const BOOKING_COLUMNS = 'id, reference, customer_name, customer_phone, customer_email, purpose, organization, guest_count, starts_at, ends_at, duration_minutes, status, source, status_changed_by_name';
+const BOOKING_COLUMNS = 'id, reference, customer_name, customer_phone, customer_email, purpose, organization, guest_count, starts_at, ends_at, duration_minutes, status, source, status_changed_by_name, created_at';
 const MANAGE_ROLES = ['admin', 'manager', 'front'];
 const STATUS_LABELS: Record<BookingStatus, string> = {
-  pending: 'Waiting for approval', confirmed: 'Confirmed', rejected: 'Rejected', cancelled: 'Cancelled', completed: 'Completed',
+  pending: 'Waiting for approval', confirmed: 'Confirmed', rejected: 'Rejected', cancelled: 'Cancelled', completed: 'Completed', expired: 'Expired',
 };
-type StatusChange = Exclude<BookingStatus, 'pending'>;
+type StatusChange = Exclude<BookingStatus, 'pending' | 'expired'>;
 const CHANGE_TEXT: Record<StatusChange, { title: string; confirm: string; done: string }> = {
   confirmed: { title: 'Approve this booking?', confirm: 'Yes, approve', done: 'approved. The customer now sees it as confirmed.' },
   rejected: { title: 'Reject this request?', confirm: 'Yes, reject', done: 'rejected. The time is available again.' },
@@ -80,6 +81,16 @@ export function BookingsPage() {
     return () => { alive = false; };
   }, [week, reloadKey]);
 
+  // Expire unanswered requests and remove old customer details, then reload if anything changed.
+  useEffect(() => {
+    if (!canManage) return;
+    let alive = true;
+    void requireSupabase().rpc('run_room_booking_housekeeping').then(({ data }) => {
+      if (alive && Number(data) > 0) setReloadKey((key) => key + 1);
+    });
+    return () => { alive = false; };
+  }, [canManage, reloadKey]);
+
   // Every request still waiting, whatever week is open, so none is missed.
   useEffect(() => {
     let alive = true;
@@ -92,7 +103,8 @@ export function BookingsPage() {
       .then(({ data, error: queryError }) => {
         if (!alive) return;
         if (queryError) setError(errorMessage(queryError));
-        setPendingRows((data ?? []) as StaffBooking[]);
+        const now = new Date();
+        setPendingRows(((data ?? []) as StaffBooking[]).filter((booking) => requestDeadline(booking) > now));
       });
     return () => { alive = false; };
   }, [reloadKey]);
@@ -125,18 +137,29 @@ export function BookingsPage() {
     }
   }
 
+  function replyBy(booking: StaffBooking): string {
+    const deadline = requestDeadline(booking);
+    const date = toBusinessDate(deadline);
+    return `${date === today ? t('Today') : formatDate(date, language, { day: 'numeric', month: 'short' })} ${toBusinessTime(deadline)}`;
+  }
+
+  function contactLinks(booking: StaffBooking, size: number, className: string) {
+    if (!booking.customer_phone && !booking.customer_email) return null;
+    return <div className={className}>{booking.customer_phone && <a href={`tel:${booking.customer_phone.replace(/[^\d+]/g, '')}`}><Phone size={size} />{booking.customer_phone}</a>}{booking.customer_email && <a href={`mailto:${booking.customer_email}`}><Mail size={size} />{booking.customer_email}</a>}</div>;
+  }
+
   function requestCard(booking: StaffBooking) {
     const now = new Date();
     const busy = savingId === booking.id;
     return <article key={booking.id} className="booking-request-card">
-      <div className="booking-request-when"><CalendarDays size={16} /><strong>{formatDate(toBusinessDate(new Date(booking.starts_at)), language, { weekday: 'short', day: 'numeric', month: 'short' })}</strong><span>{toBusinessTime(new Date(booking.starts_at))}–{toBusinessTime(new Date(booking.ends_at))}</span></div>
-      <h3><UserRound size={17} />{booking.customer_name}</h3>
+      <div className="booking-request-when"><CalendarDays size={16} /><strong>{formatDate(toBusinessDate(new Date(booking.starts_at)), language, { weekday: 'short', day: 'numeric', month: 'short' })}</strong><span>{toBusinessTime(new Date(booking.starts_at))}–{toBusinessTime(new Date(booking.ends_at))}</span><em>{t('Reply by')} {replyBy(booking)}</em></div>
+      <h3><UserRound size={17} />{booking.customer_name ?? t('Customer details removed')}</h3>
       <dl>
         <div><dt><Building2 size={15} />{t('Comes from')}</dt><dd>{booking.organization ?? '—'}</dd></div>
         <div><dt><Users size={15} />{t('Number of people')}</dt><dd>{booking.guest_count ?? '—'}</dd></div>
-        <div className="wide"><dt>{t('Purpose')}</dt><dd>{booking.purpose}</dd></div>
+        <div className="wide"><dt>{t('Purpose')}</dt><dd>{booking.purpose ?? '—'}</dd></div>
       </dl>
-      <div className="booking-request-contact"><a href={`tel:${booking.customer_phone.replace(/[^\d+]/g, '')}`}><Phone size={15} />{booking.customer_phone}</a>{booking.customer_email && <a href={`mailto:${booking.customer_email}`}><Mail size={15} />{booking.customer_email}</a>}</div>
+      {contactLinks(booking, 15, 'booking-request-contact')}
       <small>{booking.reference} · {t(booking.source === 'front_desk_qr' ? 'Front desk QR' : 'Website')}</small>
       {canManage && <div className="booking-request-actions"><button className="button booking-cancel-button" disabled={busy} onClick={() => setConfirming({ booking, status: 'rejected' })}><XCircle size={16} />{t('Reject')}</button>{canApprove(booking, now) && <button className="button button-primary" disabled={busy} onClick={() => setConfirming({ booking, status: 'confirmed' })}><CheckCircle2 size={16} />{t('Approve')}</button>}</div>}
     </article>;
@@ -145,16 +168,18 @@ export function BookingsPage() {
   function bookingCard(booking: StaffBooking) {
     const now = new Date();
     const live = isInRoomNow(booking, now);
-    const closed = !holdsTime(booking.status);
+    // A request past its reply deadline shows as expired even before housekeeping marks it.
+    const status: BookingStatus = booking.status === 'pending' && !canApprove(booking, now) ? 'expired' : booking.status;
+    const closed = !holdsTime(status);
     const busy = savingId === booking.id;
-    return <article key={booking.id} className={`booking-staff-card${closed ? ' cancelled' : ''}${booking.status === 'pending' ? ' pending' : ''}`}>
+    return <article key={booking.id} className={`booking-staff-card${closed ? ' cancelled' : ''}${status === 'pending' ? ' pending' : ''}`}>
       <div className={`booking-staff-time${live ? ' live' : ''}`}><strong>{toBusinessTime(new Date(booking.starts_at))}</strong><span>{toBusinessTime(new Date(booking.ends_at))}</span></div>
-      <div className="booking-staff-info"><div className="booking-staff-name"><div><UserRound size={16} /><strong>{booking.customer_name}</strong></div><span className={`booking-status booking-status-${live ? 'live' : booking.status}`}>{t(live ? 'In the room now' : STATUS_LABELS[booking.status])}</span></div>
+      <div className="booking-staff-info"><div className="booking-staff-name"><div><UserRound size={16} /><strong>{booking.customer_name ?? t('Customer details removed')}</strong></div><span className={`booking-status booking-status-${live ? 'live' : status}`}>{t(live ? 'In the room now' : STATUS_LABELS[status])}</span></div>
         {(booking.organization || booking.guest_count) && <div className="booking-staff-meta">{booking.organization && <span><Building2 size={13} />{booking.organization}</span>}{booking.guest_count && <span><Users size={13} />{booking.guest_count} {t('people')}</span>}</div>}
-        <p>{booking.purpose}</p>
-        <div className="booking-staff-contact"><a href={`tel:${booking.customer_phone.replace(/[^\d+]/g, '')}`}><Phone size={13} />{booking.customer_phone}</a>{booking.customer_email && <a href={`mailto:${booking.customer_email}`}><Mail size={13} />{booking.customer_email}</a>}</div>
+        {booking.purpose && <p>{booking.purpose}</p>}
+        {contactLinks(booking, 13, 'booking-staff-contact')}
         <small>{booking.reference} · {t(booking.source === 'front_desk_qr' ? 'Front desk QR' : booking.source === 'admin' ? 'Staff' : 'Website')}{booking.status_changed_by_name ? ` · ${t('Changed by')} ${booking.status_changed_by_name}` : ''}</small>
-        {canManage && booking.status === 'pending' && <div className="booking-card-actions">{canApprove(booking, now) && <button className="button button-primary" disabled={busy} onClick={() => setConfirming({ booking, status: 'confirmed' })}><CheckCircle2 size={15} />{t('Approve')}</button>}<button className="button booking-cancel-button" disabled={busy} onClick={() => setConfirming({ booking, status: 'rejected' })}><XCircle size={15} />{t('Reject')}</button></div>}
+        {canManage && status === 'pending' && <div className="booking-card-actions">{canApprove(booking, now) && <button className="button button-primary" disabled={busy} onClick={() => setConfirming({ booking, status: 'confirmed' })}><CheckCircle2 size={15} />{t('Approve')}</button>}<button className="button booking-cancel-button" disabled={busy} onClick={() => setConfirming({ booking, status: 'rejected' })}><XCircle size={15} />{t('Reject')}</button></div>}
         {canManage && booking.status === 'confirmed' && <div className="booking-card-actions">{canMarkCompleted(booking, now) && <button className="button button-quiet" disabled={busy} onClick={() => setConfirming({ booking, status: 'completed' })}><CheckCircle2 size={15} />{t('Mark completed')}</button>}<button className="button booking-cancel-button" disabled={busy} onClick={() => setConfirming({ booking, status: 'cancelled' })}><XCircle size={15} />{t('Cancel booking')}</button></div>}
       </div>
     </article>;
@@ -172,12 +197,12 @@ export function BookingsPage() {
     </section>
     <section className="panel booking-day-panel"><div className="panel-head booking-day-head"><div><span className="eyebrow">{t('DAILY SCHEDULE')}</span><h2>{formatDate(selectedDate, language, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</h2></div><span className="count-chip">{activeRows.length} {t('active bookings')}</span></div>
       {!rows ? <LoadingState label="Loading bookings…" /> : activeRows.length === 0 ? <EmptyState title="The room is free all day" detail="New bookings will appear here automatically." /> : <div className="booking-staff-schedule">{daySchedule(rows, selectedDate).map((item) => item.kind === 'free' ? <div className="booking-free-gap" key={`free-${item.start}`}><Clock3 size={14} /><span>{t('Free')} · {item.start}–{item.end}</span></div> : bookingCard(item.booking))}</div>}
-      {closedRows.length > 0 && <details className="booking-cancelled-list"><summary>{closedRows.length} {t('cancelled or rejected bookings')}</summary>{closedRows.map((booking) => bookingCard(booking))}</details>}
+      {closedRows.length > 0 && <details className="booking-cancelled-list"><summary>{closedRows.length} {t('cancelled, rejected or expired bookings')}</summary>{closedRows.map((booking) => bookingCard(booking))}</details>}
     </section>
     {pendingOpen && <div className="booking-dialog-backdrop booking-requests-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingOpen(false); }}><section className="booking-requests-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-requests-title">
       <header><div><span className="eyebrow"><Hourglass size={13} /> {t('WAITING FOR APPROVAL')}</span><h2 id="booking-requests-title">{pendingRows.length} {t('requests to check')}</h2><p>{t('Check who they are and why they need the room. Call them if anything is unclear.')}</p></div><button type="button" className="icon-button" aria-label={t('Close window')} onClick={() => setPendingOpen(false)}><X size={20} /></button></header>
       <div className="booking-requests-list">{pendingRows.map(requestCard)}</div>
     </section></div>}
-    {confirming && <div className="booking-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirming(null); }}><section className="booking-action-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-action-title"><div className={`booking-dialog-icon ${negative ? 'cancelled' : ''}`} >{negative ? <XCircle size={22} /> : <CheckCircle2 size={22} />}</div><span className="eyebrow">{t('BOOKING UPDATE')}</span><h2 id="booking-action-title">{t(CHANGE_TEXT[confirming.status].title)}</h2><p>{confirming.booking.customer_name}{confirming.booking.organization ? ` · ${confirming.booking.organization}` : ''} · {toBusinessTime(new Date(confirming.booking.starts_at))}–{toBusinessTime(new Date(confirming.booking.ends_at))}</p><div className="booking-dialog-actions"><button className="button button-quiet" onClick={() => setConfirming(null)}>{t('Go back')}</button><button className={`button ${negative ? 'booking-cancel-confirm' : 'button-primary'}`} disabled={savingId === confirming.booking.id} onClick={() => void setStatus(confirming.booking, confirming.status)}>{savingId ? t('Saving…') : t(CHANGE_TEXT[confirming.status].confirm)}</button></div></section></div>}
+    {confirming && <div className="booking-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirming(null); }}><section className="booking-action-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-action-title"><div className={`booking-dialog-icon ${negative ? 'cancelled' : ''}`} >{negative ? <XCircle size={22} /> : <CheckCircle2 size={22} />}</div><span className="eyebrow">{t('BOOKING UPDATE')}</span><h2 id="booking-action-title">{t(CHANGE_TEXT[confirming.status].title)}</h2><p>{confirming.booking.customer_name ?? t('Customer details removed')}{confirming.booking.organization ? ` · ${confirming.booking.organization}` : ''} · {toBusinessTime(new Date(confirming.booking.starts_at))}–{toBusinessTime(new Date(confirming.booking.ends_at))}</p><div className="booking-dialog-actions"><button className="button button-quiet" onClick={() => setConfirming(null)}>{t('Go back')}</button><button className={`button ${negative ? 'booking-cancel-confirm' : 'button-primary'}`} disabled={savingId === confirming.booking.id} onClick={() => void setStatus(confirming.booking, confirming.status)}>{savingId ? t('Saving…') : t(CHANGE_TEXT[confirming.status].confirm)}</button></div></section></div>}
   </>;
 }

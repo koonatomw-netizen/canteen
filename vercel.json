@@ -3,6 +3,19 @@
     {
       "source": "/assets/(.*)",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'sha256-7JDC1S295ke5I1DLW6gwgSkMHtKM4yoVaM5zv8COLFA=' 'sha256-a2Hq2UDYcsHqJOaw1Nf7VeF0PhDXJGA4F8uXr2xhFWw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://smkprxwxhhenrtzhowhr.supabase.co; connect-src 'self' https://smkprxwxhhenrtzhowhr.supabase.co wss://smkprxwxhhenrtzhowhr.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+        },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=(), payment=(), usb=()" }
+      ]
     }
   ],
   "rewrites": [
