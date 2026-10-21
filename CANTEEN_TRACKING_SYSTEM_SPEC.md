@@ -196,6 +196,11 @@ activates them. Migrate existing `staff` accounts to Front.
 - Housekeeping (expiry and data removal) runs when a customer sends a request
   and when Front, Manager, or Website Admin opens the bookings page; there is
   no separate scheduler.
+- To stop fake requests from filling the calendar, one phone number can have
+  at most 2 requests waiting for approval at once (Thai `0…` and `+66…` forms
+  count as the same number), and the site accepts at most 20 new requests per
+  hour. The database enforces both limits, including for simultaneous
+  submissions.
 - Staff check the booker's ID card or passport at the front desk before opening
   the room. The system does not copy or store ID documents.
 - Pending and confirmed bookings for the same room must never overlap. The
