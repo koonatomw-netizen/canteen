@@ -160,7 +160,8 @@ Postgres row-level security:
 - **Website Admin** manages users/roles and shared configuration, can access
   all pages, and may reopen a closing with a required reason.
 - **Front, Manager, and Website Admin** can read Podcast Room customer details,
-  cancel confirmed bookings, and mark ended bookings completed. **Website
+  approve or reject booking requests, cancel pending or confirmed bookings,
+  and mark ended bookings completed. **Website
   Auditor** can read the schedule but cannot change it. Kitchen and Co-living
   cannot read Podcast Room customer details.
 
@@ -175,13 +176,25 @@ activates them. Migrate existing `staff` accounts to Front.
 - The room is bookable daily from 09:00 to 21:00 in `Asia/Bangkok`, with starts
   every 30 minutes, durations of 30, 60, 90, or 120 minutes, and a 30-day
   booking window including today.
-- Name, phone number, and purpose are required; email is optional. Customer
-  details are used only for booking operations and are visible only to the
-  permitted staff roles.
-- Confirmed bookings for the same room must never overlap. The database must
-  enforce this rule for concurrent requests as well as the interface.
-- Staff can cancel a confirmed booking at any time or mark it completed after
-  its end time. Both actions are audited. Booking activity logs contain the
+- Name, phone number, where the customer is from (organisation), number of
+  people (1–10), and purpose are required; email is optional. The customer must
+  accept the room rules, and the acceptance time is stored. Customer details
+  are used only for booking operations and are visible only to the permitted
+  staff roles.
+- Because the room holds valuable equipment, every public booking starts as a
+  **pending request**. Front, Manager, or Website Admin approves it (it becomes
+  confirmed) or rejects it. A pending request holds its time so nobody else can
+  request the same slot; rejecting or cancelling frees the time. A request can
+  be approved only before it ends. The customer sees the current status on the
+  confirmation page with their booking code.
+- Staff check the booker's ID card or passport at the front desk before opening
+  the room. The system does not copy or store ID documents.
+- Pending and confirmed bookings for the same room must never overlap. The
+  database must enforce this rule for concurrent requests as well as the
+  interface.
+- Staff can cancel a pending or confirmed booking at any time or mark a
+  confirmed booking completed after its end time. All status changes are
+  audited. Booking activity logs contain the
   reference, times, source, and status only; they do not copy customer personal
   data into the general activity log.
 - Booking records and functions share the existing Supabase project and role
@@ -1257,8 +1270,9 @@ Phase 1 is considered successful when a user can:
 -   Complete common workflows comfortably on mobile.
 -   Book the Podcast Room from a public mobile page without an account.
 -   Prevent overlapping Podcast Room bookings, including concurrent requests.
--   Let authorised staff review the weekly room schedule, contact the customer,
-    cancel a booking, and mark an ended booking completed.
+-   Let authorised staff approve or reject Podcast Room requests, review the
+    weekly room schedule, contact the customer, cancel a booking, and mark an
+    ended booking completed.
 
 Most importantly:
 

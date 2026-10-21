@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { CalendarDays, Check, Clock3, ShieldCheck } from 'lucide-react';
+import { CalendarDays, Check, Clock3, IdCard, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { errorMessage, requireSupabase } from '../../lib/supabase';
 import { useI18n } from '../../lib/i18n';
 import {
   BOOKING_DURATIONS,
+  BOOKING_MAX_GUESTS,
+  BOOKING_ROOM_RULES,
   PODCAST_ROOM_SLUG,
   businessDayBounds,
   computeDayAvailability,
@@ -18,11 +20,10 @@ import {
 } from './bookingModel';
 import { BookingPublicLayout } from './BookingPublicLayout';
 
-type Fields = { customerName: string; customerPhone: string; customerEmail: string; purpose: string };
-type FieldName = keyof Fields;
+type Fields = { customerName: string; customerPhone: string; customerEmail: string; organization: string; guestCount: string; purpose: string };
+type FieldName = keyof Fields | 'rules';
 
-const EMPTY_FIELDS: Fields = { customerName: '', customerPhone: '', customerEmail: '', purpose: '' };
-
+const EMPTY_FIELDS: Fields = { customerName: '', customerPhone: '', customerEmail: '', organization: '', guestCount: '', purpose: '' };
 function formatDate(date: string, language: 'en' | 'th', options: Intl.DateTimeFormatOptions): string {
   return new Intl.DateTimeFormat(language === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'UTC', ...options })
     .format(new Date(`${date}T12:00:00Z`));
@@ -57,6 +58,7 @@ export function PublicBookingPage() {
   const [slot, setSlot] = useState<TimeSlot | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
   const [fields, setFields] = useState<Fields>(EMPTY_FIELDS);
+  const [rulesAccepted, setRulesAccepted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -115,7 +117,7 @@ export function PublicBookingPage() {
     setFormError(null);
   }
 
-  function updateField(name: FieldName, value: string) {
+  function updateField(name: keyof Fields, value: string) {
     setFields((previous) => ({ ...previous, [name]: value }));
     setFieldErrors((previous) => ({ ...previous, [name]: undefined }));
   }
@@ -126,7 +128,11 @@ export function PublicBookingPage() {
     const digits = fields.customerPhone.replace(/\D/g, '');
     if (digits.length < 9 || digits.length > 15 || !/^[0-9+\-\s().]+$/.test(fields.customerPhone)) next.customerPhone = t('Enter a valid phone number.');
     if (fields.customerEmail.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fields.customerEmail.trim())) next.customerEmail = t('Enter a valid email address.');
+    if (!fields.organization.trim()) next.organization = t('Tell us where you are from.');
+    const guests = Number(fields.guestCount);
+    if (!Number.isInteger(guests) || guests < 1 || guests > BOOKING_MAX_GUESTS) next.guestCount = `${t('Enter a number of people from 1 to')} ${BOOKING_MAX_GUESTS}.`;
     if (!fields.purpose.trim()) next.purpose = t('Tell us what the booking is for.');
+    if (!rulesAccepted) next.rules = t('Accept the room rules to send your request.');
     setFieldErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -147,6 +153,9 @@ export function PublicBookingPage() {
       p_customer_phone: fields.customerPhone.trim(),
       p_customer_email: fields.customerEmail.trim() || null,
       p_purpose: fields.purpose.trim(),
+      p_organization: fields.organization.trim(),
+      p_guest_count: Number(fields.guestCount),
+      p_accept_rules: rulesAccepted,
       p_source: source,
     });
     if (error) {
@@ -213,13 +222,23 @@ export function PublicBookingPage() {
               <label>{t('Name')}<input autoComplete="name" maxLength={100} value={fields.customerName} onChange={(event) => updateField('customerName', event.target.value)} aria-invalid={Boolean(fieldErrors.customerName)} />{fieldErrors.customerName && <small className="field-error">{fieldErrors.customerName}</small>}</label>
               <label>{t('Phone number')}<input type="tel" inputMode="tel" autoComplete="tel" maxLength={25} value={fields.customerPhone} onChange={(event) => updateField('customerPhone', event.target.value)} aria-invalid={Boolean(fieldErrors.customerPhone)} />{fieldErrors.customerPhone && <small className="field-error">{fieldErrors.customerPhone}</small>}</label>
               <label>{t('Email (optional)')}<input type="email" inputMode="email" autoComplete="email" maxLength={254} value={fields.customerEmail} onChange={(event) => updateField('customerEmail', event.target.value)} aria-invalid={Boolean(fieldErrors.customerEmail)} />{fieldErrors.customerEmail && <small className="field-error">{fieldErrors.customerEmail}</small>}</label>
+              <label>{t('Where are you from?')}<input autoComplete="organization" maxLength={120} placeholder={t('Company, channel or university')} value={fields.organization} onChange={(event) => updateField('organization', event.target.value)} aria-invalid={Boolean(fieldErrors.organization)} />{fieldErrors.organization && <small className="field-error">{fieldErrors.organization}</small>}</label>
+              <label>{t('Number of people')}<input type="number" inputMode="numeric" min={1} max={BOOKING_MAX_GUESTS} step={1} value={fields.guestCount} onChange={(event) => updateField('guestCount', event.target.value)} aria-invalid={Boolean(fieldErrors.guestCount)} />{fieldErrors.guestCount && <small className="field-error">{fieldErrors.guestCount}</small>}</label>
               <label className="booking-purpose-field">{t('What is the booking for?')}<textarea rows={3} maxLength={500} placeholder={t('For example: podcast recording or guest interview')} value={fields.purpose} onChange={(event) => updateField('purpose', event.target.value)} aria-invalid={Boolean(fieldErrors.purpose)} />{fieldErrors.purpose && <small className="field-error">{fieldErrors.purpose}</small>}</label>
             </div>
           </section>
 
+          <section className="panel booking-step">
+            <div className="booking-step-title"><span>5</span><div><h2>{t('Room rules')}</h2><p>{t('The room has expensive recording equipment. Staff check every request before confirming it.')}</p></div></div>
+            <ul className="booking-rules-list">{BOOKING_ROOM_RULES.map((rule) => <li key={rule}>{t(rule)}</li>)}</ul>
+            <p className="booking-id-note"><IdCard size={18} />{t('Bring your ID card or passport. Staff will check it at the front desk before opening the room.')}</p>
+            <label className="booking-rules-accept"><input type="checkbox" checked={rulesAccepted} onChange={(event) => { setRulesAccepted(event.target.checked); setFieldErrors((previous) => ({ ...previous, rules: undefined })); }} aria-invalid={Boolean(fieldErrors.rules)} /><span>{t('I have read and accept the room rules.')}</span></label>
+            {fieldErrors.rules && <small className="field-error">{fieldErrors.rules}</small>}
+          </section>
+
           {date && slot && duration && endTime && <section className="booking-summary-card"><CalendarDays size={22} /><div><span>{t('Your booking')}</span><strong>{formatDate(date, language, { weekday: 'long', day: 'numeric', month: 'long' })}</strong><small>{slot.startTime}–{endTime} · {durationLabel(duration, language)}</small></div><Check size={20} /></section>}
 
-          <button className="booking-submit" type="submit" disabled={!date || !slot || !duration || submitting}>{submitting ? t('Booking…') : endTime ? `${t('Confirm booking')} · ${slot?.startTime}–${endTime}` : t('Confirm booking')}</button>
+          <button className="booking-submit" type="submit" disabled={!date || !slot || !duration || submitting}>{submitting ? t('Sending request…') : endTime ? `${t('Send booking request')} · ${slot?.startTime}–${endTime}` : t('Send booking request')}</button>
           <p className="booking-privacy-note"><ShieldCheck size={14} /> {t('Your details are private.')} <Link to="/privacy">{t('Privacy notice')}</Link></p>
         </form>
       </main>

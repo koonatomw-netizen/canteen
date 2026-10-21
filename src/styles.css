@@ -1657,6 +1657,12 @@ html[data-theme='dark'] .archive-review-dialog .archive-review-error { border-co
 .booking-fields input:focus, .booking-fields textarea:focus { border-color: var(--bk-green); box-shadow: 0 0 0 3px var(--bk-ring); }
 .booking-fields [aria-invalid='true'] { border-color: #b4472b; }
 .booking-purpose-field { grid-column: 1 / -1; }
+.booking-rules-list { display: grid; gap: 8px; margin: 0 0 16px; padding-left: 20px; color: var(--bk-ink); font-size: 15px; line-height: 1.55; }
+.booking-id-note { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 16px; padding: 12px 14px; border: 1px solid #e6d7a8; border-radius: 10px; background: #fff9e8; color: #6b5516; font-size: 14px; line-height: 1.5; text-align: left; }
+.booking-id-note svg { flex: 0 0 auto; margin-top: 1px; }
+.booking-rules-accept { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid var(--bk-line); border-radius: 10px; color: var(--bk-ink); font-size: 15px; font-weight: 600; cursor: pointer; }
+.booking-rules-accept input { width: 22px; height: 22px; flex: 0 0 auto; margin: 0; accent-color: var(--bk-green); }
+.booking-rules-accept:has(input[aria-invalid='true']) { border-color: #b4472b; }
 .field-error { color: #a33d22; font-size: 13px; font-weight: 500; }
 .booking-summary-card { min-height: 82px; display: flex; align-items: center; gap: 14px; padding: 16px 18px; border: 1px solid #b8d8bb; border-radius: 12px; background: var(--bk-soft); color: var(--bk-green); }
 .booking-summary-card > div { flex: 1; display: grid; gap: 3px; }
@@ -1670,6 +1676,7 @@ html[data-theme='dark'] .archive-review-dialog .archive-review-error { border-co
 .booking-confirmation-main { width: min(100% - 32px, 620px); margin: 0 auto; padding: 48px 0; flex: 1; }
 .booking-confirmation-card, .booking-privacy-card { padding: 32px; text-align: center; }
 .booking-confirmation-check { margin-bottom: 12px; color: var(--bk-green); }
+.booking-confirmation-check.pending { color: #b8862b; }
 .booking-confirmation-card h1, .booking-privacy-card h1 { margin: 8px 0; color: var(--bk-ink); font: 700 30px/1.15 Geist, 'DM Sans', sans-serif; letter-spacing: -.6px; }
 .booking-confirmation-card > p, .booking-privacy-card p { color: var(--bk-muted); font-size: 16px; line-height: 1.6; }
 .booking-reference { display: grid; gap: 6px; margin: 24px 0 16px; padding: 20px; border-radius: 12px; background: var(--bk-soft); }
@@ -1734,7 +1741,15 @@ html[data-theme='dark'] .archive-review-dialog .archive-review-error { border-co
 .booking-staff-info > p { margin: 5px 0; color: #68786e; font-size: 10px; line-height: 1.5; }
 .booking-staff-info > small { color: #98a299; font-size: 8px; }
 .booking-status { flex: 0 0 auto; padding: 4px 7px; border-radius: 999px; background: #edf5ef; color: #4c7b5b; font-size: 8px; font-weight: 700; }
-.booking-status-live { background: #397158; color: #fff; }.booking-status-completed { background: #eef2f5; color: #637483; }.booking-status-cancelled { background: #f8eee9; color: #a36850; }
+.booking-status-live { background: #397158; color: #fff; }.booking-status-completed { background: #eef2f5; color: #637483; }.booking-status-cancelled, .booking-status-rejected { background: #f8eee9; color: #a36850; }
+.booking-status-pending { background: #fdf3d8; color: #8a6414; }
+.booking-staff-card.pending .booking-staff-time { background: #fdf3d8; color: #8a6414; }
+.booking-staff-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; color: #4f6657; font-size: 10px; font-weight: 700; }
+.booking-staff-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.booking-pending-panel { border-color: #ecd9a3; }
+.booking-pending-panel .eyebrow { display: inline-flex; align-items: center; gap: 5px; color: #8a6414; }
+.booking-pending-panel h2 { margin: 4px 0; }
+.booking-pending-panel p { margin: 0; color: #7f8d84; font-size: 11px; }
 .booking-staff-contact { display: flex; flex-wrap: wrap; gap: 9px; margin: 5px 0; }
 .booking-staff-contact a { display: inline-flex; align-items: center; gap: 4px; color: #4d7b5e; font-size: 9px; font-weight: 700; }
 .booking-card-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
@@ -1755,6 +1770,9 @@ html[data-theme='dark'] .app-frame :is(.booking-week-days button, .booking-actio
 html[data-theme='dark'] .app-frame :is(.booking-week-days button.active, .booking-staff-time.live) { border-color: #77a884; background: #315f48; color: #fff; }
 html[data-theme='dark'] .app-frame :is(.booking-staff-toolbar strong, .booking-week-head strong, .booking-staff-name strong, .booking-day-head h2) { color: #e0e9e2; }
 html[data-theme='dark'] .app-frame .booking-staff-time { background: #25382b; color: #b7d6bd; }
+html[data-theme='dark'] .app-frame :is(.booking-status-pending, .booking-staff-card.pending .booking-staff-time) { background: #3d3218; color: #f0d48e; }
+html[data-theme='dark'] .app-frame .booking-staff-meta { color: #b9d5bf; }
+html[data-theme='dark'] .app-frame .booking-pending-panel { border-color: #5a4a22; }
 html[data-theme='dark'] .app-frame .booking-cancel-button, html[data-theme='dark'] .booking-cancel-confirm { border-color: #6b4438; background: #39261f; color: #efae95; }
 
 @media (max-width: 720px) {
