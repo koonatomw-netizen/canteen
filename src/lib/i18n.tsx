@@ -435,7 +435,8 @@ const thai: Record<string, string> = {
   'Reject this request?': 'ไม่อนุมัติคำขอนี้ใช่ไหม?', 'Yes, reject': 'ยืนยันไม่อนุมัติ',
   'approved. The customer now sees it as confirmed.': 'อนุมัติแล้ว ลูกค้าจะเห็นสถานะเป็นยืนยันแล้ว',
   'rejected. The time is available again.': 'ไม่อนุมัติแล้ว ช่วงเวลานี้เปิดให้จองอีกครั้ง',
-  'requests to check': 'คำขอที่ต้องตรวจสอบ', 'cancelled or rejected bookings': 'การจองที่ยกเลิกหรือไม่อนุมัติ',
+  'requests to check': 'คำขอที่ต้องตรวจสอบ', 'Purpose': 'ใช้ห้องเพื่อ', 'Comes from': 'มาจาก / สังกัด', 'Close window': 'ปิดหน้าต่าง',
+  'requests waiting for approval': 'คำขอรอการอนุมัติ', 'Tap to check and approve': 'แตะเพื่อตรวจสอบและอนุมัติ', 'cancelled or rejected bookings': 'การจองที่ยกเลิกหรือไม่อนุมัติ',
   'Check who they are and why they need the room. Call them if anything is unclear.': 'ตรวจสอบว่าเป็นใครและใช้ห้องเพื่ออะไร หากไม่ชัดเจนให้โทรสอบถามก่อน',
   'Approve requests, see the weekly room schedule, customer contacts and available gaps.': 'อนุมัติคำขอ ดูตารางใช้ห้องรายสัปดาห์ ช่องว่าง และข้อมูลติดต่อของผู้จอง',
   // Weekly report

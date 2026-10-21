@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Building2, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, Headphones, Hourglass, Mail, Phone, RefreshCw, UserRound, Users, XCircle } from 'lucide-react';
+import { Building2, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, Headphones, Hourglass, Mail, Phone, RefreshCw, UserRound, Users, X, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { EmptyState, LoadingState, Notice } from '../../components/Feedback';
 import { PageTitle } from '../../components/PageTitle';
@@ -49,6 +49,8 @@ export function BookingsPage() {
   const week = useMemo(() => weekDates(selectedDate), [selectedDate]);
   const [rows, setRows] = useState<StaffBooking[] | null>(null);
   const [pendingRows, setPendingRows] = useState<StaffBooking[]>([]);
+  const [pendingOpen, setPendingOpen] = useState(false);
+  const [pendingSeen, setPendingSeen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -95,6 +97,12 @@ export function BookingsPage() {
     return () => { alive = false; };
   }, [reloadKey]);
 
+  // Open the requests popup once per visit when something is waiting; close it when none are left.
+  useEffect(() => {
+    if (pendingRows.length === 0) setPendingOpen(false);
+    else if (!pendingSeen && canManage) { setPendingOpen(true); setPendingSeen(true); }
+  }, [pendingRows, pendingSeen, canManage]);
+
   const dayRows = (rows ?? []).filter((booking) => toBusinessDate(new Date(booking.starts_at)) === selectedDate);
   const activeRows = dayRows.filter((booking) => holdsTime(booking.status));
   const closedRows = dayRows.filter((booking) => !holdsTime(booking.status));
@@ -117,13 +125,30 @@ export function BookingsPage() {
     }
   }
 
-  function bookingCard(booking: StaffBooking, showDate = false) {
+  function requestCard(booking: StaffBooking) {
+    const now = new Date();
+    const busy = savingId === booking.id;
+    return <article key={booking.id} className="booking-request-card">
+      <div className="booking-request-when"><CalendarDays size={16} /><strong>{formatDate(toBusinessDate(new Date(booking.starts_at)), language, { weekday: 'short', day: 'numeric', month: 'short' })}</strong><span>{toBusinessTime(new Date(booking.starts_at))}–{toBusinessTime(new Date(booking.ends_at))}</span></div>
+      <h3><UserRound size={17} />{booking.customer_name}</h3>
+      <dl>
+        <div><dt><Building2 size={15} />{t('Comes from')}</dt><dd>{booking.organization ?? '—'}</dd></div>
+        <div><dt><Users size={15} />{t('Number of people')}</dt><dd>{booking.guest_count ?? '—'}</dd></div>
+        <div className="wide"><dt>{t('Purpose')}</dt><dd>{booking.purpose}</dd></div>
+      </dl>
+      <div className="booking-request-contact"><a href={`tel:${booking.customer_phone.replace(/[^\d+]/g, '')}`}><Phone size={15} />{booking.customer_phone}</a>{booking.customer_email && <a href={`mailto:${booking.customer_email}`}><Mail size={15} />{booking.customer_email}</a>}</div>
+      <small>{booking.reference} · {t(booking.source === 'front_desk_qr' ? 'Front desk QR' : 'Website')}</small>
+      {canManage && <div className="booking-request-actions"><button className="button booking-cancel-button" disabled={busy} onClick={() => setConfirming({ booking, status: 'rejected' })}><XCircle size={16} />{t('Reject')}</button>{canApprove(booking, now) && <button className="button button-primary" disabled={busy} onClick={() => setConfirming({ booking, status: 'confirmed' })}><CheckCircle2 size={16} />{t('Approve')}</button>}</div>}
+    </article>;
+  }
+
+  function bookingCard(booking: StaffBooking) {
     const now = new Date();
     const live = isInRoomNow(booking, now);
     const closed = !holdsTime(booking.status);
     const busy = savingId === booking.id;
     return <article key={booking.id} className={`booking-staff-card${closed ? ' cancelled' : ''}${booking.status === 'pending' ? ' pending' : ''}`}>
-      <div className={`booking-staff-time${live ? ' live' : ''}`}>{showDate && <span>{formatDate(toBusinessDate(new Date(booking.starts_at)), language, { day: 'numeric', month: 'short' })}</span>}<strong>{toBusinessTime(new Date(booking.starts_at))}</strong><span>{toBusinessTime(new Date(booking.ends_at))}</span></div>
+      <div className={`booking-staff-time${live ? ' live' : ''}`}><strong>{toBusinessTime(new Date(booking.starts_at))}</strong><span>{toBusinessTime(new Date(booking.ends_at))}</span></div>
       <div className="booking-staff-info"><div className="booking-staff-name"><div><UserRound size={16} /><strong>{booking.customer_name}</strong></div><span className={`booking-status booking-status-${live ? 'live' : booking.status}`}>{t(live ? 'In the room now' : STATUS_LABELS[booking.status])}</span></div>
         {(booking.organization || booking.guest_count) && <div className="booking-staff-meta">{booking.organization && <span><Building2 size={13} />{booking.organization}</span>}{booking.guest_count && <span><Users size={13} />{booking.guest_count} {t('people')}</span>}</div>}
         <p>{booking.purpose}</p>
@@ -140,7 +165,7 @@ export function BookingsPage() {
     <PageTitle eyebrow="ROOM OPERATIONS" title="Podcast room bookings" detail="Approve requests, see the weekly room schedule, customer contacts and available gaps." action={<Link className="button button-quiet" to="/book" target="_blank"><ExternalLink size={15} />{t('Open public booking')}</Link>} />
     {error && <Notice>{error}</Notice>}{notice && <Notice tone="success">{notice}</Notice>}
     <section className="panel booking-staff-toolbar"><div><Headphones size={19} /><span><strong>{t('Podcast Room')}</strong><small>{BOOKING_OPEN_TIME}–{BOOKING_CLOSE_TIME} · {t('Bangkok time')}</small></span></div><button className="button button-quiet" onClick={() => setReloadKey((key) => key + 1)}><RefreshCw size={15} />{t('Refresh')}</button></section>
-    {pendingRows.length > 0 && <section className="panel booking-pending-panel"><div className="panel-head"><div><span className="eyebrow"><Hourglass size={13} /> {t('WAITING FOR APPROVAL')}</span><h2>{pendingRows.length} {t('requests to check')}</h2><p>{t('Check who they are and why they need the room. Call them if anything is unclear.')}</p></div></div><div className="booking-staff-schedule">{pendingRows.map((booking) => bookingCard(booking, true))}</div></section>}
+    {pendingRows.length > 0 && <button type="button" className="booking-pending-banner" onClick={() => setPendingOpen(true)}><Hourglass size={20} /><span><strong>{pendingRows.length} {t('requests waiting for approval')}</strong><small>{t('Tap to check and approve')}</small></span><ChevronRight size={18} /></button>}
     <section className="panel booking-week-panel">
       <div className="booking-week-head"><button className="icon-button" aria-label={t('Previous week')} onClick={() => setSelectedDate(addCalendarDays(selectedDate, -7))}><ChevronLeft size={19} /></button><div><span>{t('Week of')}</span><strong>{formatDate(week[0], language, { day: 'numeric', month: 'long', year: 'numeric' })}</strong></div><button className="icon-button" aria-label={t('Next week')} onClick={() => setSelectedDate(addCalendarDays(selectedDate, 7))}><ChevronRight size={19} /></button>{selectedDate !== today && <button className="button button-small button-quiet" onClick={() => setSelectedDate(today)}>{t('Today')}</button>}</div>
       <div className="booking-week-days">{week.map((date) => { const count = activeCount(date); return <button type="button" key={date} className={date === selectedDate ? 'active' : ''} onClick={() => setSelectedDate(date)} aria-pressed={date === selectedDate}><span>{formatDate(date, language, { weekday: 'short' })}</span><strong>{Number(date.slice(8))}</strong><small>{rows ? count ? `${count} ${t('booked')}` : t('Free') : '·'}</small></button>; })}</div>
@@ -149,6 +174,10 @@ export function BookingsPage() {
       {!rows ? <LoadingState label="Loading bookings…" /> : activeRows.length === 0 ? <EmptyState title="The room is free all day" detail="New bookings will appear here automatically." /> : <div className="booking-staff-schedule">{daySchedule(rows, selectedDate).map((item) => item.kind === 'free' ? <div className="booking-free-gap" key={`free-${item.start}`}><Clock3 size={14} /><span>{t('Free')} · {item.start}–{item.end}</span></div> : bookingCard(item.booking))}</div>}
       {closedRows.length > 0 && <details className="booking-cancelled-list"><summary>{closedRows.length} {t('cancelled or rejected bookings')}</summary>{closedRows.map((booking) => bookingCard(booking))}</details>}
     </section>
+    {pendingOpen && <div className="booking-dialog-backdrop booking-requests-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingOpen(false); }}><section className="booking-requests-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-requests-title">
+      <header><div><span className="eyebrow"><Hourglass size={13} /> {t('WAITING FOR APPROVAL')}</span><h2 id="booking-requests-title">{pendingRows.length} {t('requests to check')}</h2><p>{t('Check who they are and why they need the room. Call them if anything is unclear.')}</p></div><button type="button" className="icon-button" aria-label={t('Close window')} onClick={() => setPendingOpen(false)}><X size={20} /></button></header>
+      <div className="booking-requests-list">{pendingRows.map(requestCard)}</div>
+    </section></div>}
     {confirming && <div className="booking-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirming(null); }}><section className="booking-action-dialog" role="dialog" aria-modal="true" aria-labelledby="booking-action-title"><div className={`booking-dialog-icon ${negative ? 'cancelled' : ''}`} >{negative ? <XCircle size={22} /> : <CheckCircle2 size={22} />}</div><span className="eyebrow">{t('BOOKING UPDATE')}</span><h2 id="booking-action-title">{t(CHANGE_TEXT[confirming.status].title)}</h2><p>{confirming.booking.customer_name}{confirming.booking.organization ? ` · ${confirming.booking.organization}` : ''} · {toBusinessTime(new Date(confirming.booking.starts_at))}–{toBusinessTime(new Date(confirming.booking.ends_at))}</p><div className="booking-dialog-actions"><button className="button button-quiet" onClick={() => setConfirming(null)}>{t('Go back')}</button><button className={`button ${negative ? 'booking-cancel-confirm' : 'button-primary'}`} disabled={savingId === confirming.booking.id} onClick={() => void setStatus(confirming.booking, confirming.status)}>{savingId ? t('Saving…') : t(CHANGE_TEXT[confirming.status].confirm)}</button></div></section></div>}
   </>;
 }
