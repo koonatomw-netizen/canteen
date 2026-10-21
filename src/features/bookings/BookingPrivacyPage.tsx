@@ -5,7 +5,7 @@ import { useI18n } from '../../lib/i18n';
 export function BookingPrivacyPage() {
   const { t } = useI18n();
   const sections = [
-    ['Information we collect', 'Your name, phone number, optional email, booking purpose, and booking date and time.'],
+    ['Information we collect', 'Your name, phone number, optional email, where you are from, number of people, booking purpose, booking date and time, and when you accepted the room rules. Staff look at your ID card at the front desk but do not copy or store it.'],
     ['How we use it', 'We use this information to manage your booking, identify you on arrival, and contact you if the booking changes.'],
     ['Who can see it', 'Only authorised 4Seas staff can see customer details. Other visitors see only which times are unavailable.'],
     ['How long we keep it', 'We keep booking information only as long as needed for operations. Contact the front desk if you want to request deletion.'],

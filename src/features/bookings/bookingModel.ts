@@ -6,8 +6,17 @@ export const BOOKING_SLOT_MINUTES = 30;
 export const BOOKING_WINDOW_DAYS = 30;
 export const BOOKING_DURATIONS = [30, 60, 90, 120] as const;
 export const PODCAST_ROOM_SLUG = 'podcast-room';
+export const BOOKING_MAX_GUESTS = 10;
+// The room holds expensive equipment, so every booker accepts these before requesting.
+export const BOOKING_ROOM_RULES = [
+  'The person who booked must be present for the whole booking and show an ID card or passport at the front desk.',
+  'Do not move, unplug or take any equipment out of the room. Ask staff if something needs changing.',
+  'No food or drinks near the equipment. Closed water bottles only.',
+  'Report any damage or problem to staff straight away. The booker is responsible for damage or loss during the booking.',
+  'Finish on time and leave the room as you found it.',
+] as const;
 
-export type BookingStatus = 'confirmed' | 'cancelled' | 'completed';
+export type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled' | 'completed';
 export type BookingSource = 'front_desk_qr' | 'website' | 'admin';
 
 export interface StaffBooking {
@@ -17,6 +26,9 @@ export interface StaffBooking {
   customer_phone: string;
   customer_email: string | null;
   purpose: string;
+  /** Empty for bookings made before staff approval was required. */
+  organization: string | null;
+  guest_count: number | null;
   starts_at: string;
   ends_at: string;
   duration_minutes: number;
@@ -173,7 +185,7 @@ export function weekDates(date: string): string[] {
 
 export function daySchedule(bookings: StaffBooking[], date: string): ScheduleItem[] {
   const active = bookings
-    .filter((booking) => booking.status !== 'cancelled' && toBusinessDate(new Date(booking.starts_at)) === date)
+    .filter((booking) => holdsTime(booking.status) && toBusinessDate(new Date(booking.starts_at)) === date)
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   const items: ScheduleItem[] = [];
   let cursor = timeToMinutes(BOOKING_OPEN_TIME);
@@ -187,6 +199,15 @@ export function daySchedule(bookings: StaffBooking[], date: string): ScheduleIte
   const close = timeToMinutes(BOOKING_CLOSE_TIME);
   if (cursor < close) items.push({ kind: 'free', start: minutesToTime(cursor), end: minutesToTime(close) });
   return items;
+}
+
+/** Whether a booking takes up its time on the schedule (rejected and cancelled ones free it). */
+export function holdsTime(status: BookingStatus): boolean {
+  return status === 'pending' || status === 'confirmed' || status === 'completed';
+}
+
+export function canApprove(booking: StaffBooking, now: Date): boolean {
+  return booking.status === 'pending' && new Date(booking.ends_at).getTime() > now.getTime();
 }
 
 export function canMarkCompleted(booking: StaffBooking, now: Date): boolean {

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   businessDateTimeToInstant,
+  canApprove,
   canMarkCompleted,
+  holdsTime,
   normalizeBookingReference,
   computeDayAvailability,
   daySchedule,
@@ -22,6 +24,8 @@ function booking(start: string, end: string, status: StaffBooking['status'] = 'c
     customer_phone: '0812345678',
     customer_email: null,
     purpose: 'Episode',
+    organization: 'Chiang Mai University',
+    guest_count: 2,
     starts_at: start,
     ends_at: end,
     duration_minutes: 60,
@@ -57,11 +61,23 @@ describe('podcast room staff schedule', () => {
     const items = daySchedule([
       booking('2026-10-21T03:00:00Z', '2026-10-21T04:00:00Z'),
       booking('2026-10-21T05:00:00Z', '2026-10-21T06:00:00Z', 'cancelled'),
+      booking('2026-10-21T06:00:00Z', '2026-10-21T07:00:00Z', 'rejected'),
       booking('2026-10-21T07:00:00Z', '2026-10-21T08:00:00Z'),
+      booking('2026-10-21T09:00:00Z', '2026-10-21T10:00:00Z', 'pending'),
     ], DAY);
     expect(items.map((item) => item.kind === 'free' ? `free ${item.start}-${item.end}` : `booked ${toBusinessTime(new Date(item.booking.starts_at))}`)).toEqual([
-      'free 09:00-10:00', 'booked 10:00', 'free 11:00-14:00', 'booked 14:00', 'free 15:00-21:00',
+      'free 09:00-10:00', 'booked 10:00', 'free 11:00-14:00', 'booked 14:00', 'free 15:00-16:00', 'booked 16:00', 'free 17:00-21:00',
     ]);
+  });
+
+  it('lets staff approve only pending requests that have not ended', () => {
+    const request = booking('2026-10-21T03:00:00Z', '2026-10-21T04:00:00Z', 'pending');
+    expect(canApprove(request, new Date('2026-10-21T03:30:00Z'))).toBe(true);
+    expect(canApprove(request, new Date('2026-10-21T04:00:00Z'))).toBe(false);
+    expect(canApprove({ ...request, status: 'confirmed' }, new Date('2026-10-21T03:00:00Z'))).toBe(false);
+    expect(isInRoomNow(request, new Date('2026-10-21T03:30:00Z'))).toBe(false);
+    expect(holdsTime('pending')).toBe(true);
+    expect(holdsTime('rejected')).toBe(false);
   });
 
   it('allows completion only after the booking ends and detects current use', () => {
