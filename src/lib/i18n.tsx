@@ -440,6 +440,8 @@ const thai: Record<string, string> = {
   'cancelled, rejected or expired bookings': 'การจองที่ยกเลิก ไม่อนุมัติ หรือหมดอายุ',
   'This request expired': 'คำขอนี้หมดอายุแล้ว', 'Staff will reply by': 'พนักงานจะตอบกลับภายใน',
   'Staff could not confirm it in time, so the time was released. Please send a new request or contact the front desk.': 'พนักงานไม่สามารถยืนยันได้ทันเวลา ช่วงเวลานี้จึงถูกปล่อยให้คนอื่นจองได้ กรุณาส่งคำขอใหม่หรือติดต่อเคาน์เตอร์',
+  'This phone number already has 2 requests waiting for approval. Please wait for staff to reply, or contact the front desk.': 'เบอร์นี้มีคำขอรออนุมัติอยู่แล้ว 2 รายการ กรุณารอพนักงานตอบกลับ หรือติดต่อเคาน์เตอร์',
+  'We are receiving many requests right now. Please try again in an hour or contact the front desk.': 'ขณะนี้มีคำขอจองเข้ามาจำนวนมาก กรุณาลองใหม่ในอีก 1 ชั่วโมง หรือติดต่อเคาน์เตอร์',
   'requests to check': 'คำขอที่ต้องตรวจสอบ', 'Purpose': 'ใช้ห้องเพื่อ', 'Comes from': 'มาจาก / สังกัด', 'Close window': 'ปิดหน้าต่าง',
   'requests waiting for approval': 'คำขอรอการอนุมัติ', 'Tap to check and approve': 'แตะเพื่อตรวจสอบและอนุมัติ', 'cancelled or rejected bookings': 'การจองที่ยกเลิกหรือไม่อนุมัติ',
   'Check who they are and why they need the room. Call them if anything is unclear.': 'ตรวจสอบว่าเป็นใครและใช้ห้องเพื่ออะไร หากไม่ชัดเจนให้โทรสอบถามก่อน',

@@ -160,7 +160,10 @@ export function PublicBookingPage() {
     });
     if (error) {
       const conflict = error.code === '23P01';
-      setFormError(t(conflict ? 'That time was just booked. Choose another available time.' : 'Booking could not be saved. Check the details and try again.'));
+      setFormError(t(conflict ? 'That time was just booked. Choose another available time.'
+        : error.message === 'too_many_pending_for_phone' ? 'This phone number already has 2 requests waiting for approval. Please wait for staff to reply, or contact the front desk.'
+        : error.message === 'too_many_requests' ? 'We are receiving many requests right now. Please try again in an hour or contact the front desk.'
+        : 'Booking could not be saved. Check the details and try again.'));
       if (conflict) {
         setSlot(null);
         setDuration(null);
