@@ -8,7 +8,7 @@ export function BookingPrivacyPage() {
     ['Information we collect', 'Your name, phone number, optional email, where you are from, number of people, booking purpose, booking date and time, and when you accepted the room rules. Staff look at your ID card at the front desk but do not copy or store it.'],
     ['How we use it', 'We use this information to manage your booking, identify you on arrival, and contact you if the booking changes.'],
     ['Who can see it', 'Only authorised 4Seas staff can see customer details. Other visitors see only which times are unavailable.'],
-    ['How long we keep it', 'We keep booking information only as long as needed for operations. Contact the front desk if you want to request deletion.'],
+    ['How long we keep it', 'Six months after your booking, we automatically delete your name, contact details, organisation and purpose. We keep only the booking date and time for room statistics. Contact the front desk if you want us to delete your details sooner.'],
   ];
   return <BookingPublicLayout><main className="booking-confirmation-main"><section className="panel booking-privacy-card"><span className="eyebrow">{t('YOUR INFORMATION')}</span><h1>{t('Privacy notice')}</h1>{sections.map(([title, body]) => <div key={title}><h2>{t(title)}</h2><p>{t(body)}</p></div>)}<Link className="button button-primary" to="/book">{t('Back to booking')}</Link></section></main></BookingPublicLayout>;
 }

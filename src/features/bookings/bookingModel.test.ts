@@ -4,6 +4,7 @@ import {
   canApprove,
   canMarkCompleted,
   holdsTime,
+  requestDeadline,
   normalizeBookingReference,
   computeDayAvailability,
   daySchedule,
@@ -32,6 +33,7 @@ function booking(start: string, end: string, status: StaffBooking['status'] = 'c
     status,
     source: 'website',
     status_changed_by_name: null,
+    created_at: '2026-10-20T00:00:00Z',
   };
 }
 
@@ -70,11 +72,16 @@ describe('podcast room staff schedule', () => {
     ]);
   });
 
-  it('lets staff approve only pending requests that have not ended', () => {
-    const request = booking('2026-10-21T03:00:00Z', '2026-10-21T04:00:00Z', 'pending');
-    expect(canApprove(request, new Date('2026-10-21T03:30:00Z'))).toBe(true);
-    expect(canApprove(request, new Date('2026-10-21T04:00:00Z'))).toBe(false);
-    expect(canApprove({ ...request, status: 'confirmed' }, new Date('2026-10-21T03:00:00Z'))).toBe(false);
+  it('lets staff approve pending requests until 24 hours pass or the booking starts', () => {
+    // Sent 15 hours before it starts, so the start time comes before the 24-hour limit.
+    const request = { ...booking('2026-10-21T03:00:00Z', '2026-10-21T04:00:00Z', 'pending'), created_at: '2026-10-20T12:00:00Z' };
+    expect(requestDeadline(request).toISOString()).toBe('2026-10-21T03:00:00.000Z');
+    expect(canApprove(request, new Date('2026-10-21T02:59:00Z'))).toBe(true);
+    expect(canApprove(request, new Date('2026-10-21T03:00:00Z'))).toBe(false);
+    const later = { ...request, starts_at: '2026-10-25T03:00:00Z', ends_at: '2026-10-25T04:00:00Z' };
+    expect(requestDeadline(later).toISOString()).toBe('2026-10-21T12:00:00.000Z');
+    expect(canApprove({ ...request, status: 'confirmed' }, new Date('2026-10-20T03:00:00Z'))).toBe(false);
+    expect(holdsTime('expired')).toBe(false);
     expect(isInRoomNow(request, new Date('2026-10-21T03:30:00Z'))).toBe(false);
     expect(holdsTime('pending')).toBe(true);
     expect(holdsTime('rejected')).toBe(false);

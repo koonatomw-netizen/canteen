@@ -184,9 +184,18 @@ activates them. Migrate existing `staff` accounts to Front.
 - Because the room holds valuable equipment, every public booking starts as a
   **pending request**. Front, Manager, or Website Admin approves it (it becomes
   confirmed) or rejects it. A pending request holds its time so nobody else can
-  request the same slot; rejecting or cancelling frees the time. A request can
-  be approved only before it ends. The customer sees the current status on the
+  request the same slot; rejecting or cancelling frees the time. Staff must
+  answer within 24 hours of the request or before it starts, whichever comes
+  first; an unanswered request then becomes **expired** and frees its time.
+  The customer sees the current status and the reply deadline on the
   confirmation page with their booking code.
+- Six months after a booking ends, the customer's name, phone, email,
+  organisation, and purpose are deleted automatically; the booking date, time,
+  and status remain for room statistics. Each removal run is recorded in the
+  activity log as a count, without personal data.
+- Housekeeping (expiry and data removal) runs when a customer sends a request
+  and when Front, Manager, or Website Admin opens the bookings page; there is
+  no separate scheduler.
 - Staff check the booker's ID card or passport at the front desk before opening
   the room. The system does not copy or store ID documents.
 - Pending and confirmed bookings for the same room must never overlap. The

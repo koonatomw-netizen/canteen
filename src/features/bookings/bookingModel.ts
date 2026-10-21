@@ -16,16 +16,21 @@ export const BOOKING_ROOM_RULES = [
   'Finish on time and leave the room as you found it.',
 ] as const;
 
-export type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled' | 'completed';
+// Keep in sync with app_private.room_request_deadline and the retention period in the database.
+export const BOOKING_REPLY_HOURS = 24;
+export const BOOKING_DATA_RETENTION_MONTHS = 6;
+
+export type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled' | 'completed' | 'expired';
 export type BookingSource = 'front_desk_qr' | 'website' | 'admin';
 
 export interface StaffBooking {
   id: string;
   reference: string;
-  customer_name: string;
-  customer_phone: string;
+  /** Customer details are null once removed after the retention period. */
+  customer_name: string | null;
+  customer_phone: string | null;
   customer_email: string | null;
-  purpose: string;
+  purpose: string | null;
   /** Empty for bookings made before staff approval was required. */
   organization: string | null;
   guest_count: number | null;
@@ -35,6 +40,7 @@ export interface StaffBooking {
   status: BookingStatus;
   source: BookingSource;
   status_changed_by_name: string | null;
+  created_at: string;
 }
 
 export interface BusyInterval {
@@ -206,8 +212,16 @@ export function holdsTime(status: BookingStatus): boolean {
   return status === 'pending' || status === 'confirmed' || status === 'completed';
 }
 
+/** Staff must answer a request within 24 hours of it being sent, and before it starts. */
+export function requestDeadline(booking: Pick<StaffBooking, 'created_at' | 'starts_at'>): Date {
+  return new Date(Math.min(
+    new Date(booking.created_at).getTime() + BOOKING_REPLY_HOURS * 3_600_000,
+    new Date(booking.starts_at).getTime(),
+  ));
+}
+
 export function canApprove(booking: StaffBooking, now: Date): boolean {
-  return booking.status === 'pending' && new Date(booking.ends_at).getTime() > now.getTime();
+  return booking.status === 'pending' && requestDeadline(booking).getTime() > now.getTime();
 }
 
 export function canMarkCompleted(booking: StaffBooking, now: Date): boolean {
